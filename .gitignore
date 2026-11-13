@@ -1,5 +1,6 @@
 # Local configuration and secrets — never commit these.
 /config.php
+/docker/.env
 /keys/
 *.key
 

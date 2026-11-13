@@ -12,3 +12,4 @@ public/media/
 public/servers/
 public/index.html
 public/*/index.html
+docker/.env

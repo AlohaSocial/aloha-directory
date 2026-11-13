@@ -1,6 +1,6 @@
 # Operating the directory
 
-For the directory operator (Nextcloud in phase one, the foundation later).
+For the directory operator (Nextcloud in phase one, the foundation later). Installation, day-to-day running and upgrades have their own guides: [installation.md](installation.md), [running.md](running.md) and [upgrading.md](upgrading.md).
 
 ## Topology (concept 13.1)
 

@@ -90,12 +90,13 @@ Open <http://localhost:8000> for the website and <http://localhost:8000/console>
 
 ## Running with Docker
 
-`docker/compose.yaml` runs MariaDB, PHP-FPM, two background workers, a cron container and nginx:
+`docker/compose.yaml` runs MariaDB, PHP-FPM, two background workers, a cron container and nginx. The full walkthrough, including keys and TLS, is in [docs/installation.md](docs/installation.md#installing-with-docker); in short:
 
 ```sh
 cp config.sample.php config.php      # output_dir '/srv/www'; key paths under /etc/aloha-directory/keys/
 mkdir keys && …                      # list key files, readable by uid 82 (www-data in Alpine), mode 640
-DIRECTORY_DB_PASSWORD=… docker compose -f docker/compose.yaml up -d --build
+echo "DIRECTORY_DB_PASSWORD=$(openssl rand -hex 24)" > docker/.env
+docker compose -f docker/compose.yaml up -d --build
 docker compose -f docker/compose.yaml exec app bin/console app:curator:invite you@example.org "Your Name" --admin
 ```
 
@@ -123,9 +124,18 @@ bin/console messenger:consume checks --time-limit=3600 --memory-limit=256M
 
 Run at least these two workers (the `worker` and `worker-checks` services in `docker/compose.yaml`), so a flood of verification requests can never stop the hourly checks. More replicas check faster. A run of `app:check` queues nothing while checks from the previous run are still waiting. Failed check jobs are retried once after 5 minutes and then land in the `failed` queue (`bin/console messenger:failed:show`). `/metrics` reports the age of the oldest waiting job per queue, and `app:monitor` raises an alarm when a worker seems to be down.
 
-## Operations
+## Documentation
 
-See [docs/operations.md](docs/operations.md) for the key ceremony and key rotation, monitoring (`/metrics` and `app:monitor`), the audit chain, the change guard, backups, retention and failure handling. [docs/loadtest.md](docs/loadtest.md) explains the load test and its response-time targets.
+| Guide | For |
+|---|---|
+| [docs/installation.md](docs/installation.md) | Installing a production instance, with Docker or on a server |
+| [docs/running.md](docs/running.md) | What runs, starting and stopping, everyday commands, logs, growing |
+| [docs/upgrading.md](docs/upgrading.md) | Moving to a new version, migrations, going back |
+| [docs/operations.md](docs/operations.md) | Key ceremony and rotation, monitoring and alarms, audit chain, change guard, retention, backups, failure handling |
+| [docs/server-integration.md](docs/server-integration.md) | The API contract for the Aloha server app |
+| [docs/lists.md](docs/lists.md) | The signed list format and how clients verify it |
+| [docs/loadtest.md](docs/loadtest.md) | The load test and its response-time targets |
+| [docs/concept-mapping.md](docs/concept-mapping.md) | Where each part of the concept is implemented |
 
 ## Development
 
