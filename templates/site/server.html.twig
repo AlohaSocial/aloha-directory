@@ -236,11 +236,11 @@
                                 <rect class="up-none" x="{{ x }}" y="60" width="5" height="4"><title>{{ d.day }}: not listed yet</title></rect>
                             {% else %}
                                 {% set h = max(3, (d.percent * 0.64)|round) %}
-                                <rect class="{{ d.percent >= 99 ? 'up-good' : (d.percent >= 90 ? 'up-ok' : 'up-bad') }}" x="{{ x }}" y="{{ 64 - h }}" width="5" height="{{ h }}"><title>{{ d.day }}: {{ d.percent }}%</title></rect>
+                                <rect class="{{ d.percent >= 95 ? 'up-good' : (d.percent >= 75 ? 'up-ok' : 'up-bad') }}" x="{{ x }}" y="{{ 64 - h }}" width="5" height="{{ h }}"><title>{{ d.day }}: {{ d.percent }}%</title></rect>
                             {% endif %}
                         {% endfor %}
                     </svg>
-                    <figcaption class="small muted">Each bar is one day, from {{ history.uptime|first.day }} to today. Hover over a bar for the date and value.</figcaption>
+                    <figcaption class="small muted">Each bar is one day, from {{ history.uptime|first.day }} to today: green when the server reported in at least 95% of the hours, amber from 75%, red below. Hover over a bar for the date and value.</figcaption>
                 </figure>
 
                 {% if history.checks is not empty %}

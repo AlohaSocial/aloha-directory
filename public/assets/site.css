@@ -1098,7 +1098,7 @@ code.key {
 
 /* --- Reliability section of server pages ------------------------------------------------- */
 .reliability .uptime { margin: 1rem 0; }
-.reliability .uptime svg { display: block; width: 100%; max-width: 540px; height: 64px; }
+.reliability .uptime svg { display: block; width: 100%; max-width: 760px; height: 64px; }
 .reliability .up-good { fill: var(--ok); }
 .reliability .up-ok { fill: var(--mid); }
 .reliability .up-bad { fill: var(--danger); }
