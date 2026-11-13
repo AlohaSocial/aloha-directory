@@ -1,0 +1,306 @@
+{% extends 'console/base.html.twig' %}
+{% import 'console/_macros.html.twig' as m %}
+{% import 'console/_profile.html.twig' as p %}
+{% block title %}{{ server.domain }}{% endblock %}
+{% block content %}
+<header class="page-head">
+    <h1>{{ server.displayName }}</h1>
+    <p><a href="https://{{ server.domain }}" rel="noopener noreferrer">{{ server.domain }}</a> · {{ m.state(server) }} · weight {{ server.weight }}</p>
+    {% if server.pauseKind %}<p class="flash flash-warning">{{ server.pauseKind.label }}: {{ server.pauseReason }} (since {{ m.date(server.pausedAt) }})</p>{% endif %}
+    {% if server.decisionReason and server.state.value in ['delisted', 'rejected'] %}<p class="flash flash-warning">Public reason: {{ server.decisionReason }}</p>{% endif %}
+    {% if conflict %}<p class="flash flash-error" role="alert">You declared a conflict of interest for this server ({{ conflict.note }}). You can read, but not review, propose or confirm.</p>{% endif %}
+</header>
+
+<div class="columns">
+<div class="main-col">
+
+{# --- Open proposals --------------------------------------------------------------------- #}
+{% set open = proposals|filter(x => x.status.value == 'open') %}
+{% if open is not empty %}
+<section class="card highlight">
+    <h2>Open proposals</h2>
+    {% for prop in open %}
+        <article class="proposal">
+            <p><strong>{{ prop.action.label }}</strong>{% if prop.params.weight_percent is defined %} to {{ prop.params.weight_percent / 100 }}{% endif %}
+               — proposed by {{ prop.proposedBy ? prop.proposedBy.displayName : 'a former curator' }} {{ m.date(prop.proposedAt) }}</p>
+            <p>{{ prop.reason }}</p>
+            {% if prop.params.rule is defined %}<p>Rule: {{ delisting_reasons[prop.params.rule] ?? prop.params.rule }}</p>{% endif %}
+            {% if prop.params.public_reason is defined %}<p>Public reason: {{ prop.params.public_reason }}</p>{% endif %}
+            {% if not conflict %}
+            <div class="inline-forms">
+                {% if not prop.proposedBy or prop.proposedBy.id != me.id %}
+                <form method="post" action="{{ path('console_proposal_confirm', {domain: server.domain, id: prop.id}) }}">
+                    {{ m.csrf() }}
+                    <label>Note (optional) <input type="text" name="note" maxlength="2000"></label>
+                    <button type="submit">Confirm as second curator</button>
+                </form>
+                {% endif %}
+                <form method="post" action="{{ path('console_proposal_decline', {domain: server.domain, id: prop.id}) }}">
+                    {{ m.csrf() }}
+                    <label>{{ prop.proposedBy and prop.proposedBy.id == me.id ? 'Withdraw' : 'Decline' }}: why? <input type="text" name="note" maxlength="2000" required></label>
+                    <button type="submit" class="secondary">{{ prop.proposedBy and prop.proposedBy.id == me.id ? 'Withdraw' : 'Decline' }}</button>
+                </form>
+            </div>
+            {% endif %}
+        </article>
+    {% endfor %}
+</section>
+{% endif %}
+
+{# --- Actions --------------------------------------------------------------------------- #}
+{% if not conflict %}
+<section class="card">
+    <h2>Actions</h2>
+
+    {% if server.state.value in ['in_review', 'waitlisted'] %}
+    <details>
+        <summary>Record the review checklist</summary>
+        <form method="post" action="{{ path('console_server_review', {domain: server.domain}) }}" class="stack">
+            {{ m.csrf() }}
+            <input type="hidden" name="kind" value="initial">
+            <input type="hidden" name="fingerprint" value="{{ server.profileFingerprint }}">
+            {% for key, item in initial_checklist %}
+                <label class="check"><input type="checkbox" name="checklist[{{ key }}]" value="1"> <strong>{{ item[0] }}</strong> — {{ item[1] }}</label>
+            {% endfor %}
+            <label>Notes <textarea name="notes" required maxlength="5000" rows="4"></textarea></label>
+            <button type="submit">Save review</button>
+        </form>
+    </details>
+    {% endif %}
+
+    {% if server.state.value in ['listed', 'paused'] %}
+    <details>
+        <summary>Record a re-review</summary>
+        <form method="post" action="{{ path('console_server_review', {domain: server.domain}) }}" class="stack">
+            {{ m.csrf() }}
+            <input type="hidden" name="kind" value="rereview">
+            <input type="hidden" name="fingerprint" value="{{ server.profileFingerprint }}">
+            {% for key, item in rereview_checklist %}
+                <label class="check"><input type="checkbox" name="checklist[{{ key }}]" value="1"> <strong>{{ item[0] }}</strong> — {{ item[1] }}</label>
+            {% endfor %}
+            <label>Notes <textarea name="notes" required maxlength="5000" rows="3"></textarea></label>
+            <button type="submit">Save re-review</button>
+        </form>
+    </details>
+    {% endif %}
+
+    <details>
+        <summary>Propose a decision (needs a second curator)</summary>
+        <form method="post" action="{{ path('console_server_propose', {domain: server.domain}) }}" class="stack">
+            {{ m.csrf() }}
+            <label>Decision
+                <select name="action" required>
+                    {% for a in actions %}<option value="{{ a.value }}">{{ a.label }}</option>{% endfor %}
+                </select>
+            </label>
+            <label>Reason for the other curators <textarea name="reason" required maxlength="2000" rows="3"></textarea></label>
+            <fieldset>
+                <legend>Only for some decisions</legend>
+                <label>New weight (0.5 – 2, steps of 0.05) <input type="number" name="weight" min="0.5" max="2" step="0.05" value="{{ server.weight }}"></label>
+                <label>Rule broken (delisting)
+                    <select name="rule"><option value="">—</option>{% for key, label in delisting_reasons %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
+                </label>
+                <label>Public reason (delisting, rejection) <textarea name="public_reason" maxlength="1000" rows="2"></textarea></label>
+            </fieldset>
+            {% if featured_unmet is not empty %}
+                <p class="hint">Not yet eligible for featuring: {{ featured_unmet|join(' ') }}</p>
+            {% endif %}
+            <button type="submit">Propose</button>
+        </form>
+    </details>
+
+    {% if server.state.value == 'listed' or (server.state.value == 'paused' and server.pauseKind and server.pauseKind.value != 'curator') %}
+    <details>
+        <summary>Pause now (one curator, immediate)</summary>
+        <form method="post" action="{{ path('console_server_pause', {domain: server.domain}) }}" class="stack">
+            {{ m.csrf() }}
+            <label>The specific concern (sent to the admin) <textarea name="concern" required maxlength="2000" rows="3"></textarea></label>
+            <button type="submit" class="danger">Pause listing</button>
+        </form>
+    </details>
+    {% endif %}
+
+    {% if server.state.value == 'in_review' %}
+    <details>
+        <summary>Put on the waiting list</summary>
+        <form method="post" action="{{ path('console_server_waitlist', {domain: server.domain}) }}" class="stack">
+            {{ m.csrf() }}
+            <label>Note to the admin <textarea name="note" required maxlength="2000" rows="2"></textarea></label>
+            <button type="submit" class="secondary">Move to waiting list</button>
+        </form>
+    </details>
+    {% endif %}
+
+    <details>
+        <summary>Write a note or ask the admin</summary>
+        <form method="post" action="{{ path('console_server_comment', {domain: server.domain}) }}" class="stack">
+            {{ m.csrf() }}
+            <label>Text <textarea name="body" required maxlength="5000" rows="3"></textarea></label>
+            <fieldset class="radios">
+                <label><input type="radio" name="visibility" value="internal" checked> Internal note (curators only)</label>
+                <label><input type="radio" name="visibility" value="admin"> Question to the server admin</label>
+            </fieldset>
+            <button type="submit">Save</button>
+        </form>
+    </details>
+
+    <div class="inline-forms">
+        <form method="post" action="{{ path('console_server_check', {domain: server.domain}) }}">
+            {{ m.csrf() }}<button type="submit" class="secondary">Run checks now</button>
+        </form>
+        <details>
+            <summary>Declare a conflict of interest</summary>
+            <form method="post" action="{{ path('console_server_conflict', {domain: server.domain}) }}" class="stack">
+                {{ m.csrf() }}
+                <label>How are you involved? <input type="text" name="note" required maxlength="500"></label>
+                <button type="submit" class="secondary">Declare conflict</button>
+            </form>
+        </details>
+    </div>
+</section>
+{% endif %}
+
+{# --- Profile ---------------------------------------------------------------------------- #}
+{% if server.pendingProfile %}
+<section class="card highlight">
+    <h2>Profile changes waiting for review</h2>
+    <p>Terms, jurisdiction, operator or moderation changed. The approved values stay published until a curator accepts the change.</p>
+    {{ p.diff(pending_diff) }}
+    {% if not conflict %}
+    <div class="inline-forms">
+        <form method="post" action="{{ path('console_server_profile', {domain: server.domain, decision: 'approve'}) }}">{{ m.csrf() }}<input type="hidden" name="fingerprint" value="{{ server.pendingProfileFingerprint }}"><button type="submit">Accept changes</button></form>
+        <form method="post" action="{{ path('console_server_profile', {domain: server.domain, decision: 'reject'}) }}">
+            {{ m.csrf() }}<label>Reason for the admin <input type="text" name="reason" required maxlength="2000"></label>
+            <button type="submit" class="secondary">Reject changes</button>
+        </form>
+    </div>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if server.approvedProfile and profile_diff is not empty %}
+<section class="card">
+    <h2>Changes since the approved version</h2>
+    <p>Descriptions, images, languages, account and search details go live at once. You can revert them.</p>
+    {{ p.diff(profile_diff) }}
+    {% if not conflict %}
+    <form method="post" action="{{ path('console_server_profile', {domain: server.domain, decision: 'revert'}) }}" class="inline-forms">
+        {{ m.csrf() }}<label>Reason for the admin <input type="text" name="reason" required maxlength="2000"></label>
+        <button type="submit" class="secondary">Revert to approved</button>
+    </form>
+    {% endif %}
+</section>
+{% endif %}
+
+<section class="card">
+    <h2>Profile</h2>
+    {% if server.mediaError %}<p class="flash flash-warning">Images: {{ server.mediaError }}</p>{% endif %}
+    {% if server.logoHash %}<img src="/media/{{ server.logoHash }}.webp" alt="Logo" class="logo" width="96" height="96">{% endif %}
+    {% if server.profile %}{{ p.tree(server.profile) }}{% else %}<p class="empty">No profile received yet.</p>{% endif %}
+</section>
+
+{% if entry %}
+<section class="card">
+    <h2>As published in servers.json</h2>
+    <dl class="facts">
+        <dt>State</dt><dd>{{ entry.state }}</dd>
+        <dt>Signup</dt><dd>{{ entry.signup.state }} · {{ entry.signup.mode }} · capacity {{ entry.signup.capacity }} · approval wait {{ entry.signup.approval_wait }}</dd>
+        <dt>Weight</dt><dd>{{ entry.weight }}</dd>
+    </dl>
+</section>
+{% endif %}
+
+<section class="card">
+    <h2>Comments</h2>
+    {% for c in comments %}
+        <article class="comment {{ c.fromServer ? 'from-server' : (c.visibility.value == 'admin' ? 'to-admin' : 'internal') }}">
+            <p class="meta">{{ c.fromServer ? 'Server admin' : (c.curator ? c.curator.displayName : 'System') }}
+                · {{ c.visibility.value == 'admin' ? 'visible to admin' : 'internal' }} · {{ m.date(c.createdAt) }}</p>
+            <p class="pre">{{ c.body }}</p>
+        </article>
+    {% else %}<p class="empty">No comments.</p>{% endfor %}
+</section>
+
+</div>
+<aside class="side-col">
+<section class="card">
+    <h2>Facts</h2>
+    <dl class="facts">
+        <dt>Enrolled</dt><dd>{{ m.date(server.enrolledAt) }}</dd>
+        <dt>Listed since</dt><dd>{{ m.date(server.listedAt) }}</dd>
+        <dt>Reviewed</dt><dd>{{ m.date(server.reviewedAt) }}</dd>
+        <dt>Next review</dt><dd>{{ m.date(server.nextReviewAt) }}</dd>
+        <dt>Key id</dt><dd class="mono small">{{ server.keyId ?? '—' }}</dd>
+        <dt>Admin contact</dt><dd>{{ server.adminEmail ?? '—' }}</dd>
+        <dt>Availability (30 d)</dt><dd>{{ availability|number_format(1) }} %</dd>
+    </dl>
+</section>
+
+<section class="card">
+    <h2>Last heartbeat</h2>
+    <dl class="facts">
+        <dt>Received</dt><dd>{{ m.date(server.lastHeartbeatAt) }}</dd>
+        <dt>Version</dt><dd>{{ server.softwareVersion ?? '—' }} (Nextcloud {{ server.nextcloudVersion ?? '—' }})</dd>
+        <dt>Signup</dt><dd>{{ server.signupOpen is null ? '—' : (server.signupOpen ? 'open' : 'closed') }} · {{ server.signupMode ?? '—' }}</dd>
+        <dt>Free accounts</dt><dd>{{ server.availableAccounts ?? '—' }}</dd>
+        <dt>Approval backlog</dt><dd>{{ server.approvalBacklog ?? '—' }}</dd>
+        <dt>Users</dt><dd>{{ server.usersTotal ?? '—' }} total · {{ server.usersActiveMonth ?? '—' }} active/month</dd>
+        <dt>Federation</dt><dd>{{ server.federationOk is null ? '—' : (server.federationOk ? 'ok' : 'failing since ' ~ server.federationFailingSince|date('Y-m-d H:i')) }}</dd>
+        <dt>Queue lag</dt><dd>{{ server.queueLagSeconds ?? '—' }} s</dd>
+        <dt>Search</dt><dd>{{ server.heartbeatSearch ? server.heartbeatSearch|join(', ') : '—' }} · load {{ server.searchLoad ?? '—' }}</dd>
+    </dl>
+</section>
+
+<section class="card">
+    <h2>Automatic checks</h2>
+    <ul class="checks">
+    {% for name, label in check_labels %}
+        {% if checks[name] is defined %}
+            {% set c = checks[name] %}
+            <li class="{{ c.passed ? 'pass' : 'fail' }}"><strong>{{ c.passed ? '✔' : '✘' }} {{ label }}</strong><br><span class="small">{{ c.message }}</span><br><span class="muted small">{{ m.date(c.checkedAt) }}{% if not c.passed %} · failing {{ c.consecutiveFailures }}×{% endif %}</span></li>
+        {% endif %}
+    {% else %}<li class="empty">Not checked yet.</li>{% endfor %}
+    </ul>
+</section>
+
+<section class="card">
+    <h2>Heartbeats</h2>
+    <table class="compact">
+        <thead><tr><th>Received</th><th>Free</th><th>Backlog</th><th>Fed.</th></tr></thead>
+        <tbody>
+        {% for h in heartbeats %}
+            <tr><td>{{ h.receivedAt|date('m-d H:i') }}</td><td>{{ h.availableAccounts }}</td><td>{{ h.approvalBacklog }}</td><td>{{ h.federationOk ? 'ok' : '✘' }}</td></tr>
+        {% else %}<tr><td colspan="4" class="empty">None yet.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section class="card">
+    <h2>Reviews</h2>
+    {% for r in reviews %}
+        <article class="review"><p class="meta">{{ r.kind }} · {{ r.curator ? r.curator.displayName : '—' }} · {{ m.date(r.createdAt) }}</p>
+            <p>{% for k, v in r.checklist %}<span class="badge {{ v ? 'ok' : 'no' }}">{{ k }}</span> {% endfor %}</p>
+            <p class="pre small">{{ r.notes }}</p></article>
+    {% else %}<p class="empty">No reviews yet.</p>{% endfor %}
+</section>
+
+<section class="card">
+    <h2>Complaints</h2>
+    <ul>{% for c in complaints %}<li><a href="{{ path('console_complaint', {id: c.id}) }}">{{ c.category }} · {{ c.status.value }}</a> {{ m.date(c.createdAt) }}</li>{% else %}<li class="empty">None.</li>{% endfor %}</ul>
+</section>
+
+<section class="card">
+    <h2>Conflicts of interest</h2>
+    <ul>{% for c in conflicts %}<li>{{ c.curator.displayName }}: {{ c.note }}</li>{% else %}<li class="empty">None declared.</li>{% endfor %}</ul>
+</section>
+
+<section class="card">
+    <h2>Recent history</h2>
+    <ul class="small">
+    {% for a in audit %}<li>{{ m.date(a.createdAt) }} · {{ a.actorLabel }} · {{ a.action }}</li>{% else %}<li class="empty">Nothing yet.</li>{% endfor %}
+    </ul>
+    <p><a href="{{ path('console_audit', {domain: server.domain}) }}">Full audit log for this server</a></p>
+</section>
+</aside>
+</div>
+{% endblock %}

@@ -1,0 +1,104 @@
+# Aloha Directory — run locally or on a single host:
+#
+#   cp config.sample.php config.php        # adjust (README: "Running with Docker")
+#   docker compose -f docker/compose.yaml up -d --build
+#   docker compose -f docker/compose.yaml exec app bin/console app:curator:invite you@example.org "Your Name" --admin
+#
+# Then open http://localhost:8080. For production, put a TLS-terminating proxy or CDN in front.
+name: aloha-directory
+
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: directory
+      MARIADB_USER: directory
+      MARIADB_PASSWORD: ${DIRECTORY_DB_PASSWORD:-change-me}
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--log-bin=binlog", "--binlog-format=ROW", "--expire-logs-days=8"]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      retries: 10
+    volumes:
+      - db:/var/lib/mysql
+
+  app:
+    build: { context: .., dockerfile: docker/Dockerfile }
+    restart: unless-stopped
+    environment:
+      RUN_MIGRATIONS: "1"
+      DATABASE_URL: mysql://directory:${DIRECTORY_DB_PASSWORD:-change-me}@db:3306/directory?serverVersion=11.4.0-MariaDB&charset=utf8mb4
+      LOCK_DSN: mysql://directory:${DIRECTORY_DB_PASSWORD:-change-me}@db:3306/directory
+      DIRECTORY_OUTPUT_DIR: /srv/www
+    volumes:
+      - ../config.php:/app/config.php:ro
+      - ../keys:/etc/aloha-directory/keys:ro
+      - www:/srv/www
+    depends_on:
+      db: { condition: service_healthy }
+
+  cron:
+    build: { context: .., dockerfile: docker/Dockerfile }
+    restart: unless-stopped
+    user: root
+    entrypoint: ["/sbin/tini", "--"]
+    command: ["crond", "-f", "-l", "8"]
+    environment:
+      DATABASE_URL: mysql://directory:${DIRECTORY_DB_PASSWORD:-change-me}@db:3306/directory?serverVersion=11.4.0-MariaDB&charset=utf8mb4
+      LOCK_DSN: mysql://directory:${DIRECTORY_DB_PASSWORD:-change-me}@db:3306/directory
+      DIRECTORY_OUTPUT_DIR: /srv/www
+    volumes:
+      - ../config.php:/app/config.php:ro
+      - ../keys:/etc/aloha-directory/keys:ro
+      - www:/srv/www
+    depends_on:
+      app: { condition: service_started }
+
+  # Background jobs. "worker" serves domain verification first, then checks; "worker-checks" only
+  # runs checks, so a flood of verifications can never stop the hourly checks. Scale with --scale.
+  worker:
+    build: { context: .., dockerfile: docker/Dockerfile }
+    restart: unless-stopped
+    command: ["php", "/app/bin/console", "messenger:consume", "verify", "checks", "--time-limit=3600", "--memory-limit=256M", "--no-interaction"]
+    environment:
+      DATABASE_URL: mysql://directory:${DIRECTORY_DB_PASSWORD:-change-me}@db:3306/directory?serverVersion=11.4.0-MariaDB&charset=utf8mb4
+      LOCK_DSN: mysql://directory:${DIRECTORY_DB_PASSWORD:-change-me}@db:3306/directory
+      DIRECTORY_OUTPUT_DIR: /srv/www
+    volumes:
+      - ../config.php:/app/config.php:ro
+      - ../keys:/etc/aloha-directory/keys:ro
+      - www:/srv/www
+    depends_on:
+      app: { condition: service_started }
+
+  worker-checks:
+    build: { context: .., dockerfile: docker/Dockerfile }
+    restart: unless-stopped
+    command: ["php", "/app/bin/console", "messenger:consume", "checks", "--time-limit=3600", "--memory-limit=256M", "--no-interaction"]
+    environment:
+      DATABASE_URL: mysql://directory:${DIRECTORY_DB_PASSWORD:-change-me}@db:3306/directory?serverVersion=11.4.0-MariaDB&charset=utf8mb4
+      LOCK_DSN: mysql://directory:${DIRECTORY_DB_PASSWORD:-change-me}@db:3306/directory
+      DIRECTORY_OUTPUT_DIR: /srv/www
+    volumes:
+      - ../config.php:/app/config.php:ro
+      - ../keys:/etc/aloha-directory/keys:ro
+      - www:/srv/www
+    depends_on:
+      app: { condition: service_started }
+
+  web:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports: ["8080:8080"]
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx-snippets:/etc/nginx/snippets:ro
+      - www:/srv/www:ro
+    depends_on:
+      app: { condition: service_started }
+
+volumes:
+  db:
+  www:

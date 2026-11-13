@@ -1,0 +1,208 @@
+{% extends 'site/base.html.twig' %}
+{% set active = 'transparency' %}
+{% set count_labels = {
+    applications: 'Applications',
+    entered_review: 'Entered human review',
+    approvals: 'Approved and listed',
+    rejections: 'Rejected',
+    waitlisted: 'Put on the waiting list',
+    withdrawals: 'Withdrawn by their admin',
+    pauses: 'Paused',
+    delistings: 'Delisted',
+    appeals_decided: 'Appeals decided',
+    complaints: 'Complaints received',
+    complaints_resolved: 'Complaints resolved',
+    complaints_dismissed: 'Complaints dismissed',
+    list_builds: 'Signed lists published'
+} %}
+{% set list_titles = {servers: 'Server list (servers.json)', search: 'Search provider list (search.json)', keys: 'Key set (keys.json)'} %}
+
+{% macro history_table(rows, title) %}
+    {% if rows is empty %}
+        <p class="muted">Nothing published yet.</p>
+    {% else %}
+        <div class="table-wrap">
+            <table class="history">
+                <caption class="visually-hidden">{{ title }}</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Serial</th>
+                        <th scope="col">Issued (UTC)</th>
+                        <th scope="col" class="num">Entries</th>
+                        <th scope="col">SHA-256 of the file</th>
+                        <th scope="col">Trigger</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                        {% set sha = row.envelopeSha256|default('') %}
+                        <tr>
+                            <td>{{ row.serial|default('') }}</td>
+                            <td>{% if row.issuedAt|default(null) is not null %}<time datetime="{{ row.issuedAt|date('Y-m-d\\TH:i:s\\Z', 'UTC') }}">{{ row.issuedAt|date('Y-m-d H:i', 'UTC') }}</time>{% endif %}</td>
+                            <td class="num">{{ row.entryCount|default('') }}</td>
+                            <td><code class="hash" title="{{ sha }}">{{ sha|slice(0, 12) }}{% if sha|length > 12 %}&hellip;{% endif %}</code></td>
+                            <td>{{ row.reason|default('') }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+{% endmacro %}
+
+{% import _self as m %}
+
+{% block title %}Transparency · Aloha Directory{% endblock %}
+{% block description %}Delistings, quarterly reports and the history of the signed lists.{% endblock %}
+
+{% block content %}
+    <h1>Transparency</h1>
+    <p class="lead">
+        Every delisting is published here with its reason. Each quarter we publish a report with the numbers, and the
+        history of every signed list is public.
+    </p>
+
+    <nav class="toc" aria-label="On this page">
+        <ul>
+            <li><a href="#delistings">Delistings</a></li>
+            <li><a href="#reports">Quarterly reports</a></li>
+            <li><a href="#history">List history</a></li>
+            <li><a href="#audit">Audit log</a></li>
+        </ul>
+    </nav>
+
+    <section aria-labelledby="delistings">
+        <h2 id="delistings">Delistings</h2>
+        {% if delistings is empty %}
+            <p class="muted">No server has been delisted so far.</p>
+        {% else %}
+            <div class="table-wrap">
+                <table>
+                    <caption class="visually-hidden">Delistings, newest first</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Date</th>
+                            <th scope="col">Server</th>
+                            <th scope="col">Decision</th>
+                            <th scope="col">Rule</th>
+                            <th scope="col">Reason</th>
+                            <th scope="col">Appeal</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in delistings %}
+                            <tr>
+                                <td><time datetime="{{ entry.decidedAt|date('Y-m-d') }}">{{ entry.decidedAt|date('Y-m-d') }}</time></td>
+                                <td>{{ entry.serverDomain }}</td>
+                                <td>{{ entry.kind|capitalize }}</td>
+                                <td>{{ reasons[entry.rule]|default(entry.rule) }}</td>
+                                <td>{{ entry.reason }}</td>
+                                <td>{{ entry.appealOutcome ?? 'None' }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+        <p class="small muted">A delisted server may apply again after 6 months. See <a href="/criteria/#delisting">how delisting works</a>.</p>
+    </section>
+
+    <section aria-labelledby="reports">
+        <h2 id="reports">Quarterly reports</h2>
+        {% if reports is empty %}
+            <p class="muted">The first report will appear after the first full quarter.</p>
+        {% else %}
+            {% for report in reports %}
+                <section class="panel report" aria-labelledby="report-{{ report.quarter }}">
+                    <h3 id="report-{{ report.quarter }}">{{ report.quarter }}</h3>
+                    <p class="small muted">Generated {{ report.generatedAt|date('Y-m-d') }}</p>
+                    <dl class="stats">
+                        {% for key, label in count_labels %}
+                            {% if report.data[key] is defined %}
+                                <div><dt>{{ label }}</dt><dd>{{ report.data[key] }}</dd></div>
+                            {% endif %}
+                        {% endfor %}
+                    </dl>
+
+                    {% set by_rule = report.data.delistings_by_rule|default([]) %}
+                    {% set by_category = report.data.complaints_by_category|default([]) %}
+                    <div class="report-breakdowns">
+                        <div>
+                            <h4>Delistings by rule</h4>
+                            {% if by_rule is empty %}
+                                <p class="muted small">None.</p>
+                            {% else %}
+                                <table class="compact">
+                                    <caption class="visually-hidden">Delistings by rule, {{ report.quarter }}</caption>
+                                    <thead><tr><th scope="col">Rule</th><th scope="col" class="num">Count</th></tr></thead>
+                                    <tbody>
+                                        {% for rule, count in by_rule %}
+                                            <tr><td>{{ reasons[rule]|default(rule) }}</td><td class="num">{{ count }}</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <h4>Complaints by category</h4>
+                            {% if by_category is empty %}
+                                <p class="muted small">None.</p>
+                            {% else %}
+                                <table class="compact">
+                                    <caption class="visually-hidden">Complaints by category, {{ report.quarter }}</caption>
+                                    <thead><tr><th scope="col">Category</th><th scope="col" class="num">Count</th></tr></thead>
+                                    <tbody>
+                                        {% for category, count in by_category %}
+                                            <tr><td>{{ complaint_categories[category]|default(category) }}</td><td class="num">{{ count }}</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            {% endif %}
+                        </div>
+                    </div>
+                </section>
+            {% endfor %}
+        {% endif %}
+    </section>
+
+    <section aria-labelledby="history">
+        <h2 id="history">List history</h2>
+        <p>
+            Every signed list the directory publishes is recorded here. The same files are mirrored in the public GitHub
+            repository <a href="https://github.com/alohasocial/directory-lists">alohasocial/directory-lists</a>, so anyone
+            can see exactly what changed and when. Hashes are shortened here (hover over one to see it in full); compare
+            them with <code>sha256sum</code> of a downloaded file. To check the signatures, see <a href="/keys/">signing keys</a>.
+        </p>
+        {% for key, title in list_titles %}
+            <h3>{{ title }}</h3>
+            {{ m.history_table(history[key]|default([]), title) }}
+        {% endfor %}
+    </section>
+
+    <section aria-labelledby="audit">
+        <h2 id="audit">Audit log</h2>
+        <p>
+            Every curator decision and every automatic change is written to an audit log. Each entry is chained to the
+            previous one by a SHA-256 hash, and once a day the head of that chain is signed with the list key and published
+            here and in the Git mirror. If anyone changed, inserted or deleted an entry later, the chain would no longer match
+            these published heads; the directory checks this every day.
+        </p>
+        {% if audit_heads is empty %}
+            <p class="empty">No head has been published yet.</p>
+        {% else %}
+            <table class="history">
+                <thead><tr><th scope="col">Day</th><th scope="col">Entries</th><th scope="col">Head hash</th><th scope="col">Signed file</th></tr></thead>
+                <tbody>
+                {% for h in audit_heads %}
+                    <tr>
+                        <td>{{ h.day }}</td>
+                        <td>{{ h.seq }}</td>
+                        <td class="mono" title="{{ h.hash }}">{{ h.hash|slice(0, 16) }}…</td>
+                        <td><a href="/transparency/audit/{{ h.day }}.json">{{ h.day }}.json</a></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+    </section>
+{% endblock %}

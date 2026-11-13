@@ -1,0 +1,69 @@
+{% extends 'site/base.html.twig' %}
+{% set active = 'privacy' %}
+
+{% block title %}Privacy · Aloha Directory{% endblock %}
+{% block description %}What the Aloha Directory knows, what it does not know, and how long it keeps data.{% endblock %}
+
+{% block content %}
+    <article class="prose">
+        <h1>Privacy</h1>
+        <p class="lead">
+            The directory is built to know as little as possible. It publishes lists of servers; it is not part of signing
+            up, posting or searching.
+        </p>
+
+        <h2>Who is responsible</h2>
+        <p>
+            The directory is run by Nextcloud GmbH, Germany, so the EU General Data Protection Regulation (GDPR) applies.
+            The directory processes the personal data of server admins and of people who send a report. Data of people
+            who use a server is the responsibility of that server, under its own privacy policy.
+        </p>
+
+        <h2>What the directory never learns</h2>
+        <ul>
+            <li><strong>Who signs up where.</strong> The Aloha apps download the signed list and then talk to the server you choose directly.</li>
+            <li><strong>What anyone searches for.</strong> Searches go from your server to a search provider, not through the directory.</li>
+            <li><strong>What you do on this website.</strong> There are no cookies, no analytics and no third-party content on these pages.</li>
+        </ul>
+
+        <h2>What the directory holds, and for how long</h2>
+        <div class="table-wrap">
+            <table>
+                <caption class="visually-hidden">Data held by the directory</caption>
+                <thead>
+                    <tr><th scope="col">Data</th><th scope="col">Held</th><th scope="col">Kept for</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Server profiles and heartbeats</td><td>Yes; they are public facts about the servers</td><td>Profiles while listed; heartbeats 90 days, then only daily totals</td></tr>
+                    <tr><td>Admin contact for each server</td><td>Yes</td><td>While the server is enrolled, plus 1 year</td></tr>
+                    <tr><td>Curator notes and decisions</td><td>Yes; delisting reasons are public</td><td>Permanently, in the audit log</td></tr>
+                    <tr><td>Reports about servers</td><td>Yes: the server, category and text</td><td>As part of the curators' records</td></tr>
+                    <tr><td>Email address in a report (optional)</td><td>Only if you give one</td><td>Deleted 90 days after the report is closed</td></tr>
+                    <tr><td>Who signed up where</td><td><strong>No</strong></td><td>Signup goes straight from the app to the server</td></tr>
+                    <tr><td>Search queries</td><td><strong>No</strong></td><td>Queries go from the server to the search provider</td></tr>
+                    <tr><td>IP addresses of list downloads</td><td>Only to block abuse</td><td>At most 24 hours</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h2>List downloads</h2>
+        <p>
+            The list files log only aggregate counts. They set no cookies. IP addresses are kept for at most 24 hours, and
+            only to block abuse. The apps also ship with a copy of the list, and the lists are mirrored on GitHub, so you
+            do not have to contact the directory at all.
+        </p>
+
+        <h2>Reports</h2>
+        <p>
+            When you <a href="/report">report a server</a>, the curators see what you wrote and, if you give one, your email
+            address. The server admin sees the text of the complaint, but never your email address or any other detail
+            about who you are.
+        </p>
+
+        <h2>Your rights</h2>
+        <p>
+            Under the GDPR you can ask for access to, correction or deletion of your personal data, object to its use, and
+            complain to a data protection supervisory authority. To use these rights, contact Nextcloud GmbH.
+        </p>
+    </article>
+{% endblock %}

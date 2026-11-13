@@ -1,0 +1,16 @@
+{% extends 'console/base.html.twig' %}
+{% block title %}Recovery codes{% endblock %}
+{% block content %}
+<section class="narrow card">
+    <h1>Your recovery codes</h1>
+    <p>Each code works once, instead of a code from your authenticator app. Store them somewhere safe, such as a password manager. <strong>They are shown only now.</strong></p>
+    <ol class="codes mono">
+        {% for code in codes %}<li>{{ code }}</li>{% endfor %}
+    </ol>
+    {% if first_time %}
+        <p><a class="button" href="{{ path('console_login') }}">Continue to sign in</a></p>
+    {% else %}
+        <p><a class="button" href="{{ path('console_account') }}">Back to my account</a></p>
+    {% endif %}
+</section>
+{% endblock %}

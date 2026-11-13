@@ -1,0 +1,124 @@
+{% extends 'site/base.html.twig' %}
+{% set active = 'report' %}
+{% set field_labels = {domain: 'Server', category: 'What is wrong', text: 'Your report', contact_email: 'Your email address'} %}
+
+{% macro field_errors(errors, field) %}
+    {% set messages = errors[field]|default([]) %}
+    {% if messages is not iterable %}{% set messages = [messages] %}{% endif %}
+    {% if messages is not empty %}
+        <ul class="field-errors" id="{{ field }}-error">
+            {% for message in messages %}<li>{{ message }}</li>{% endfor %}
+        </ul>
+    {% endif %}
+{% endmacro %}
+
+{% import _self as m %}
+
+{% block title %}Report a server · Aloha Directory{% endblock %}
+{% block description %}Tell the Aloha Directory curators about a problem with a listed server.{% endblock %}
+
+{% block content %}
+    {% set errors = errors|default([]) %}
+    {% set values = values|default([]) %}
+
+    <h1>Report a server</h1>
+
+    {% if submitted|default(false) %}
+        <div class="notice notice-success" role="status">
+            <h2>Thank you</h2>
+            <p>
+                Your report is in the curators' queue. They will look into it, and the server admin will see what you wrote
+                so they can respond. Your identity is never shared with them.
+            </p>
+            <p><a href="/">Back to the servers</a></p>
+        </div>
+    {% else %}
+        <div class="prose">
+            <p class="lead">
+                Is a listed server not keeping its promises? Tell the curators. Every report is read by a person.
+            </p>
+            <p>
+                The server admin sees the text of your report so they can respond, but never your email address or anything
+                else about who you are. For an urgent problem, such as illegal content left up or a data breach, a curator
+                can pause the server at once.
+            </p>
+        </div>
+
+        {% if errors is not empty %}
+            <div class="notice notice-error" role="alert" aria-labelledby="error-title">
+                <h2 id="error-title">Please check your report</h2>
+                <ul>
+                    {% for field, messages in errors %}
+                        {% for message in (messages is iterable ? messages : [messages]) %}
+                            <li>
+                                {% if field_labels[field] is defined %}<a href="#{{ field }}">{{ field_labels[field] }}</a>: {% endif %}{{ message }}
+                            </li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+
+        <form class="report-form" method="post" action="/report">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+
+            {% set has_error = errors.domain is defined and errors.domain is not empty %}
+            <div class="field{{ has_error ? ' has-error' }}">
+                <label for="domain">Server <span class="required">(required)</span></label>
+                <p class="hint" id="domain-hint">The address of the server, for example <code>social.example.org</code>.</p>
+                <input type="text" id="domain" name="domain" value="{{ values.domain|default('') }}" required maxlength="253"
+                       autocomplete="off" autocapitalize="none" spellcheck="false" inputmode="url"
+                       aria-describedby="domain-hint{{ has_error ? ' domain-error' }}"{% if has_error %} aria-invalid="true"{% endif %}>
+                {{ m.field_errors(errors, 'domain') }}
+            </div>
+
+            {% set has_error = errors.category is defined and errors.category is not empty %}
+            {% set selected = values.category|default('') %}
+            <div class="field{{ has_error ? ' has-error' }}">
+                <label for="category">What is wrong <span class="required">(required)</span></label>
+                <select id="category" name="category" required{% if has_error %} aria-invalid="true" aria-describedby="category-error"{% endif %}>
+                    {% for key, label in categories %}
+                        <option value="{{ key }}"{% if key == selected %} selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                {{ m.field_errors(errors, 'category') }}
+            </div>
+
+            {% set has_error = errors.text is defined and errors.text is not empty %}
+            <div class="field{{ has_error ? ' has-error' }}">
+                <label for="text">Your report <span class="required">(required)</span></label>
+                <p class="hint" id="text-hint">
+                    Describe what happened, with dates and links to posts or pages if you can. Between 20 and 5,000 characters.
+                    The server admin will see this text.
+                </p>
+                <textarea id="text" name="text" rows="8" required minlength="20" maxlength="5000"
+                          aria-describedby="text-hint{{ has_error ? ' text-error' }}"{% if has_error %} aria-invalid="true"{% endif %}>{{ values.text|default('') }}</textarea>
+                {{ m.field_errors(errors, 'text') }}
+            </div>
+
+            {% set has_error = errors.contact_email is defined and errors.contact_email is not empty %}
+            <div class="field{{ has_error ? ' has-error' }}">
+                <label for="contact_email">Your email address <span class="optional">(optional)</span></label>
+                <p class="hint" id="contact_email-hint">
+                    Only if you want the curators to be able to ask you questions. It is never shared with the server admin,
+                    and it is deleted 90 days after your report is closed.
+                </p>
+                <input type="email" id="contact_email" name="contact_email" value="{{ values.contact_email|default('') }}" maxlength="254"
+                       autocomplete="email" aria-describedby="contact_email-hint{{ has_error ? ' contact_email-error' }}"{% if has_error %} aria-invalid="true"{% endif %}>
+                {{ m.field_errors(errors, 'contact_email') }}
+            </div>
+
+            <div class="hp" aria-hidden="true">
+                <label for="website">Leave this field empty</label>
+                <input type="text" id="website" name="website" value="" tabindex="-1" autocomplete="off">
+            </div>
+
+            <p class="small muted">
+                See the <a href="/covenant/">covenant</a> for what listed servers promise, and our <a href="/privacy/">privacy notice</a>
+                for how reports are handled.
+            </p>
+
+            <button type="submit" class="button">Send report</button>
+        </form>
+    {% endif %}
+{% endblock %}

@@ -1,0 +1,11 @@
+{% macro csrf() %}<input type="hidden" name="_csrf_token" value="{{ csrf_token('console') }}">{% endmacro %}
+
+{% macro state(server) %}
+    <span class="badge state-{{ server.state.value }}">{{ server.state.label }}</span>
+    {% if server.featured %}<span class="badge featured">Featured</span>{% endif %}
+    {% if server.searchProvider %}<span class="badge provider">Search provider</span>{% endif %}
+{% endmacro %}
+
+{% macro date(value) %}{% if value %}<time datetime="{{ value|date('c') }}">{{ value|date('Y-m-d H:i') }}</time>{% else %}—{% endif %}{% endmacro %}
+
+{% macro value(v) %}{% if v is null %}<span class="muted">—</span>{% else %}{{ v }}{% endif %}{% endmacro %}

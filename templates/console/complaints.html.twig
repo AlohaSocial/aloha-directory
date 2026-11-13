@@ -1,0 +1,20 @@
+{% extends 'console/base.html.twig' %}
+{% import 'console/_macros.html.twig' as m %}
+{% block title %}Complaints{% endblock %}
+{% block content %}
+<h1>Complaints</h1>
+<p>{% if all %}<a href="{{ path('console_complaints') }}">Show open only</a>{% else %}<a href="{{ path('console_complaints', {all: 1}) }}">Show all recent</a>{% endif %}</p>
+<table>
+    <thead><tr><th>Server</th><th>Category</th><th>Status</th><th>Received</th></tr></thead>
+    <tbody>
+    {% for c in complaints %}
+        <tr>
+            <td><a href="{{ path('console_complaint', {id: c.id}) }}">{{ c.server.domain }}</a></td>
+            <td>{{ categories[c.category] ?? c.category }}</td>
+            <td>{{ c.status.value }}</td>
+            <td>{{ m.date(c.createdAt) }}</td>
+        </tr>
+    {% else %}<tr><td colspan="4" class="empty">No complaints.</td></tr>{% endfor %}
+    </tbody>
+</table>
+{% endblock %}

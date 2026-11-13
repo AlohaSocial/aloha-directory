@@ -1,0 +1,37 @@
+{% extends 'console/base.html.twig' %}
+{% import 'console/_macros.html.twig' as m %}
+{% block title %}Audit log{% endblock %}
+{% block content %}
+<h1>Audit log</h1>
+<section class="card{% if chain.verification and not chain.verification.ok %} highlight{% endif %}">
+    <h2>Hash chain</h2>
+    <p>Every entry is chained to the previous one by its SHA-256 hash within a minute, and the head of the chain is signed and published daily on the transparency page and in the Git mirror. A changed, inserted or deleted entry breaks the chain.</p>
+    <dl class="facts">
+        <dt>Head</dt><dd>entry {{ chain.head.seq }}, <span class="mono small" title="{{ chain.head.hash }}">{{ chain.head.hash|slice(0, 16) }}…</span></dd>
+        <dt>Last published head</dt><dd>{% if chain.published %}{{ chain.published.day }} (entry {{ chain.published.seq }}){% else %}none yet{% endif %}</dd>
+        <dt>Last verification</dt><dd>{% if chain.verification %}{% if chain.verification.ok %}OK: {{ chain.verification.entries }} entries, {{ chain.verification.heads_checked }} published heads match ({{ chain.verification.at|date('Y-m-d H:i') }} UTC){% else %}<strong>FAILED:</strong> {{ chain.verification.error }}{% endif %}{% else %}not yet run{% endif %}</dd>
+        {% if chain.backlog > 0 %}<dt>Not sealed</dt><dd><strong>{{ chain.backlog }} entries are older than 10 minutes and not chained yet. Is the minute job running?</strong></dd>{% endif %}
+    </dl>
+</section>
+<form method="get" class="filters">
+    <label>Action <select name="action"><option value="">All</option>{% for a in actions %}<option value="{{ a }}" {% if a == filters.action %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></label>
+    <label>Server <input type="text" name="domain" value="{{ filters.domain }}"></label>
+    <label>Actor <input type="text" name="actor" value="{{ filters.actor }}" placeholder="e-mail, domain, system"></label>
+    <button type="submit">Filter</button>
+</form>
+<table>
+    <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Server</th><th>Details</th></tr></thead>
+    <tbody>
+    {% for e in entries %}
+        <tr>
+            <td>{{ m.date(e.createdAt) }}</td>
+            <td>{{ e.actorLabel }} <span class="muted">({{ e.actorType }})</span></td>
+            <td class="mono">{{ e.action }}</td>
+            <td>{% if e.serverDomain %}<a href="{{ path('console_server', {domain: e.serverDomain}) }}">{{ e.serverDomain }}</a>{% endif %}</td>
+            <td class="mono small">{{ e.details is empty ? '' : e.details|json_encode(constant('JSON_UNESCAPED_SLASHES') b-or constant('JSON_UNESCAPED_UNICODE')) }}</td>
+        </tr>
+    {% else %}<tr><td colspan="5" class="empty">No entries.</td></tr>{% endfor %}
+    </tbody>
+</table>
+{% if next %}<p><a href="{{ path('console_audit', filters|merge({before: next})) }}">Older entries</a></p>{% endif %}
+{% endblock %}

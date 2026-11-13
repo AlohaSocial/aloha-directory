@@ -1,0 +1,169 @@
+{% extends 'site/base.html.twig' %}
+{% set active = 'servers' %}
+{% set capacity_labels = {plenty: 'Plenty of places', some: 'Places available', few: 'A few places left', full: 'Full'} %}
+{% set wait_labels = {none: 'No wait', short: 'Short wait', long: 'Longer wait'} %}
+{% set mode_labels = {open: 'Open signup', approval: 'Signup with approval'} %}
+{% set operator_types = {person: 'Individual', association: 'Association', company: 'Company', public_body: 'Public body'} %}
+{% set base = media_base|default('/media/') %}
+
+{% block title %}Aloha Directory: find a server{% endblock %}
+
+{% block content %}
+    <section class="intro" aria-labelledby="intro-title">
+        <h1 id="intro-title">Find a friendly home on the fediverse</h1>
+        <p class="lead">
+            These Aloha servers are reviewed by people, follow the <a href="/covenant/">Aloha Server Covenant</a>
+            and are checked every hour.
+        </p>
+        <p>You sign up in the Aloha apps, which suggest a server from this list; here you can look around first and see who runs each one.</p>
+    </section>
+
+    {% if servers is empty %}
+        <div class="empty-state">
+            <h2>No servers listed yet</h2>
+            <p>The directory has no listed servers right now. Please check back soon.</p>
+        </div>
+    {% else %}
+        <form class="filters" id="server-filters" aria-labelledby="filters-title" hidden>
+            <h2 id="filters-title" class="visually-hidden">Filter servers</h2>
+            <div class="filter-fields">
+                <div class="field">
+                    <label for="filter-language">Language</label>
+                    <select id="filter-language" name="language" data-filter="languages">
+                        <option value="">All languages</option>
+                        {% for language in languages %}
+                            <option value="{{ language }}">{{ language }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="filter-country">Hosted in</label>
+                    <select id="filter-country" name="country" data-filter="country">
+                        <option value="">All countries</option>
+                        {% for country in countries %}
+                            <option value="{{ country }}">{{ country }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="filter-topic">Topic</label>
+                    <select id="filter-topic" name="topic" data-filter="topic">
+                        <option value="">All topics</option>
+                        {% for topic in topics %}
+                            <option value="{{ topic }}">{{ topic|capitalize }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="filter-mode">Signup</label>
+                    <select id="filter-mode" name="mode" data-filter="mode">
+                        <option value="">Any signup mode</option>
+                        {% for key, label in mode_labels %}
+                            <option value="{{ key }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field field-action">
+                    <button type="button" class="button button-quiet" id="filter-reset">Reset filters</button>
+                </div>
+            </div>
+        </form>
+
+        <p class="result-count" id="server-count" aria-live="polite">
+            {{ servers|length }} {{ servers|length == 1 ? 'server' : 'servers' }}
+        </p>
+
+        <ul class="server-grid" id="server-list">
+            {% for entry in servers %}
+                {% set signup = entry.signup|default({}) %}
+                {% set mode = signup.mode|default('approval') %}
+                {% set moderation = entry.moderation|default({}) %}
+                {% set operator = entry.operator|default({}) %}
+                <li class="server-card"
+                    data-languages="{{ entry.languages|default([])|join(' ') }}"
+                    data-country="{{ entry.region.hosting|default('') }}"
+                    data-topic="{{ entry.topic|default('general') }}"
+                    data-mode="{{ mode }}">
+                    <article aria-labelledby="server-{{ loop.index }}">
+                        <div class="card-head">
+                            {% if entry.logo is defined and entry.logo is not null and entry.logo starts with 'sha256:' %}
+                                <img class="logo" src="{{ base ~ entry.logo|slice(7) ~ '.webp' }}" alt="" width="56" height="56" loading="lazy">
+                            {% else %}
+                                <span class="logo logo-placeholder" aria-hidden="true">{{ entry.name|default(entry.domain)|first|upper }}</span>
+                            {% endif %}
+                            <div>
+                                <h2 class="card-title" id="server-{{ loop.index }}">
+                                    <a href="/servers/{{ entry.domain }}/">{{ entry.name|default(entry.domain) }}</a>
+                                </h2>
+                                <p class="domain">{{ entry.domain }}</p>
+                            </div>
+                        </div>
+
+                        {% set is_featured = entry.state|default('') == 'featured' %}
+                        {% if is_featured or entry.atproto is defined %}
+                            <ul class="badges" aria-label="Badges">
+                                {% if is_featured %}<li class="badge badge-featured">Featured</li>{% endif %}
+                                {% if entry.atproto is defined %}<li class="badge badge-bluesky">Also on Bluesky</li>{% endif %}
+                            </ul>
+                        {% endif %}
+
+                        {% if entry.description|default('') is not empty %}
+                            <p class="card-description">{{ entry.description }}</p>
+                        {% endif %}
+
+                        <dl class="facts">
+                            <div>
+                                <dt>Languages</dt>
+                                <dd>{{ entry.languages|default([]) is empty ? 'Not stated' : entry.languages|join(', ') }}</dd>
+                            </div>
+                            <div>
+                                <dt>Hosted in</dt>
+                                <dd>{{ entry.region.hosting|default('Not stated') }}</dd>
+                            </div>
+                            <div>
+                                <dt>Topic</dt>
+                                <dd>{{ entry.topic|default('general')|capitalize }}</dd>
+                            </div>
+                            <div>
+                                <dt>Run by</dt>
+                                <dd>
+                                    {{ operator.name|default('Not stated') }}
+                                    {% if operator.type is defined %}<span class="muted">({{ operator_types[operator.type]|default(operator.type) }})</span>{% endif %}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>Moderation</dt>
+                                {% set mod_parts = [] %}
+                                {% if moderation.moderators is defined %}
+                                    {% set mod_parts = mod_parts|merge([moderation.moderators ~ (moderation.moderators == 1 ? ' moderator' : ' moderators')]) %}
+                                {% endif %}
+                                {% if moderation.response_hours is defined %}
+                                    {% set mod_parts = mod_parts|merge(['replies within ' ~ moderation.response_hours ~ ' h']) %}
+                                {% endif %}
+                                <dd>{{ mod_parts is empty ? 'Not stated' : mod_parts|join(', ') }}</dd>
+                            </div>
+                            <div>
+                                <dt>Signup</dt>
+                                <dd>{{ mode_labels[mode]|default(mode) }}</dd>
+                            </div>
+                            <div>
+                                <dt>Places</dt>
+                                <dd><span class="capacity capacity-{{ signup.capacity|default('full') }}">{{ capacity_labels[signup.capacity|default('full')]|default(signup.capacity|default('')) }}</span></dd>
+                            </div>
+                            {% if mode == 'approval' %}
+                                <div>
+                                    <dt>Approval wait</dt>
+                                    <dd>{{ wait_labels[signup.approval_wait|default('none')]|default(signup.approval_wait|default('')) }}</dd>
+                                </div>
+                            {% endif %}
+                        </dl>
+
+                        <p class="card-more"><a href="/servers/{{ entry.domain }}/">Details<span class="visually-hidden"> about {{ entry.name|default(entry.domain) }}</span></a></p>
+                    </article>
+                </li>
+            {% endfor %}
+        </ul>
+
+        <p class="empty-state" id="no-match" hidden>No servers match these filters. Try another language or country, or reset the filters.</p>
+    {% endif %}
+{% endblock %}

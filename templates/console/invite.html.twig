@@ -1,0 +1,22 @@
+{% extends 'console/base.html.twig' %}
+{% block title %}Set up your curator account{% endblock %}
+{% block content %}
+<section class="narrow card">
+    <h1>Welcome, {{ invite.displayName }}</h1>
+    <p>Set a password and register a passkey for <strong>{{ invite.email }}</strong>. You will sign in with both.</p>
+    {% if error %}<p class="flash flash-error" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" class="stack" data-passkey-create="{{ passkey_options }}">
+        <label>Password (at least {{ min_length }} characters) <input type="password" name="password" required minlength="{{ min_length }}" autocomplete="new-password"></label>
+        <label>Repeat the password <input type="password" name="password_repeat" required minlength="{{ min_length }}" autocomplete="new-password"></label>
+        <fieldset>
+            <legend>Passkey</legend>
+            <p>A passkey lives on your phone, computer or security key and is unlocked with your fingerprint, face or PIN. It only works on this site, so it cannot be phished. You can add more passkeys later.</p>
+            <label>Name for this passkey <input type="text" name="passkey_name" maxlength="64" placeholder="for example: work laptop" required></label>
+        </fieldset>
+        <input type="hidden" name="attestation" value="">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token('invite') }}">
+        <p class="hint" data-passkey-status role="status" aria-live="polite"></p>
+        <button type="submit">Create my account</button>
+    </form>
+</section>
+{% endblock %}

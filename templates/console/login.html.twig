@@ -1,0 +1,23 @@
+{% extends 'console/base.html.twig' %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+<section class="narrow card">
+    <h1>Sign in</h1>
+    {% if expired %}<p class="flash flash-info" role="status">Your session ended. Please sign in again.</p>{% endif %}
+    {% if error %}<p class="flash flash-error" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" action="{{ path('console_login') }}" class="stack" data-passkey-get="{{ passkey_options }}">
+        <label>E-mail <input type="email" name="email" value="{{ last_email }}" required autocomplete="username webauthn" autofocus></label>
+        <label>Password <input type="password" name="password" required autocomplete="current-password"></label>
+        <input type="hidden" name="passkey" value="">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token('console_login') }}">
+        <p class="hint">After the password, your device asks for your passkey.</p>
+        <details>
+            <summary>Lost your passkey?</summary>
+            <label>Recovery code <input type="text" name="recovery_code" autocomplete="off" pattern="[A-Za-z0-9]{4}-?[A-Za-z0-9]{4}-?[A-Za-z0-9]{4}" maxlength="14"></label>
+            <p class="hint">Each recovery code works once. Add a new passkey in your account right after signing in.</p>
+        </details>
+        <p class="hint" data-passkey-status role="status" aria-live="polite"></p>
+        <button type="submit">Sign in</button>
+    </form>
+</section>
+{% endblock %}

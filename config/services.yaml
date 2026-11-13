@@ -1,0 +1,53 @@
+# Settings are not configured here: everything comes from config.php (see config.sample.php).
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/Config/'
+            - '../src/Entity/'
+            - '../src/Kernel.php'
+
+    # Every outbound request is refused when it targets a private, loopback or reserved address,
+    # also after DNS resolution and redirects.
+    app.outbound_http_client:
+        class: Symfony\Component\HttpClient\NoPrivateNetworkHttpClient
+        arguments: ['@http_client']
+
+    App\Http\Signature\MessageSignatureVerifier:
+        arguments:
+            $authority: '@=service("App\\Service\\DirectorySettings").authority'
+
+    App\Http\Signature\ReplayGuard: '@App\Service\DoctrineReplayGuard'
+    App\Crypto\ListSigner: '@App\Crypto\KeyFileListSigner'
+    App\Net\DnsResolver: '@App\Net\SystemDnsResolver'
+
+parameters:
+    app.user_agent: 'AlohaDirectory/1.0 (+https://directory.aloha.social)'
+    env(DIRECTORY_LOADTEST_ENABLED): '0'
+
+when@test:
+    services:
+        _defaults:
+            autowire: true
+            autoconfigure: true
+            public: true
+
+        app.outbound_http_client:
+            class: Symfony\Component\HttpClient\MockHttpClient
+            public: true
+
+        App\Tests\Support\TestQueueTransport:
+            tags: ['messenger.transport_factory']
+
+        App\Net\DnsResolver:
+            class: App\Tests\Support\FakeDnsResolver
+            public: true
+
+        Psr\Clock\ClockInterface:
+            class: Symfony\Component\Clock\MockClock
+            arguments: ['2026-11-13 12:00:00 UTC']
+            public: true

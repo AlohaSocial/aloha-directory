@@ -1,0 +1,39 @@
+{% extends 'site/base.html.twig' %}
+{% set active = 'covenant' %}
+
+{% block title %}The Aloha Server Covenant · Aloha Directory{% endblock %}
+{% block description %}The baseline every server in the Aloha Directory agrees to.{% endblock %}
+
+{% block content %}
+    <article class="prose">
+        <h1>The Aloha Server Covenant</h1>
+        <p class="lead">
+            Every server in the directory agrees to this short baseline. It follows the Mastodon Server Covenant,
+            adapted for Aloha.
+        </p>
+
+        <ol class="covenant">
+            {% for key, rule in rules %}
+                <li id="{{ key }}">
+                    <h2>{{ rule[0] }}</h2>
+                    <p>{{ rule[1] }}</p>
+                </li>
+            {% endfor %}
+        </ol>
+
+        <h2>What happens if a server breaks it</h2>
+        <p>
+            Curators look into complaints and their own findings. A server can be paused while they investigate, and the
+            admin always gets a chance to respond. Delisting needs two curators, and every delisting is published on the
+            <a href="/transparency/">transparency page</a> with the rule that was broken. The full steps are on the
+            <a href="/criteria/#delisting">listing criteria</a> page.
+        </p>
+
+        <h2>Changes to the covenant</h2>
+        <p>
+            Nextcloud GmbH runs the directory in its first phase. An advisory board of five, including at least two admins
+            of listed servers, reviews the policy twice a year and hears appeals. Changes are announced 30 days ahead on
+            this website and in the Aloha admin settings.
+        </p>
+    </article>
+{% endblock %}

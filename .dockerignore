@@ -1,0 +1,14 @@
+.git
+var/
+vendor/
+config.php
+keys/
+*.key
+.phpunit.cache
+tests/
+docker/compose.yaml
+public/lists/
+public/media/
+public/servers/
+public/index.html
+public/*/index.html

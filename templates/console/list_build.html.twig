@@ -1,0 +1,9 @@
+{% extends 'console/base.html.twig' %}
+{% import 'console/_macros.html.twig' as m %}
+{% block title %}{{ build.list }}.json {{ build.serial }}{% endblock %}
+{% block content %}
+<h1>{{ build.list }}.json serial {{ build.serial }}</h1>
+<p>Issued {{ m.date(build.issuedAt) }} · expires {{ m.date(build.expiresAt) }} · {{ build.entryCount }} entries · signed by {{ build.keyIds|join(', ') }} · SHA-256 <span class="mono small">{{ build.envelopeSha256 }}</span></p>
+<pre class="json">{{ pretty }}</pre>
+<p><a href="{{ path('console_lists', {list: build.list}) }}">Back to the list history</a></p>
+{% endblock %}

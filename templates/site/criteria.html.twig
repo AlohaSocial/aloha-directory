@@ -1,0 +1,115 @@
+{% extends 'site/base.html.twig' %}
+{% set active = 'criteria' %}
+
+{% block title %}Listing criteria · Aloha Directory{% endblock %}
+{% block description %}How servers get into the Aloha Directory, how they are reviewed and how they can be delisted.{% endblock %}
+
+{% block content %}
+    <article class="prose">
+        <h1>Listing criteria</h1>
+        <p class="lead">
+            The directory is small on purpose. A server is listed only after automatic checks and a review by people,
+            and it keeps being checked after that.
+        </p>
+
+        <nav class="toc" aria-label="On this page">
+            <ul>
+                <li><a href="#automatic">Automatic checks</a></li>
+                <li><a href="#review">Human review</a></li>
+                <li><a href="#featured">Featured servers</a></li>
+                <li><a href="#rereview">Re-reviews</a></li>
+                <li><a href="#delisting">Delisting and appeals</a></li>
+            </ul>
+        </nav>
+
+        <section aria-labelledby="automatic">
+            <h2 id="automatic">1. Automatic checks</h2>
+            <p>Before a person looks at an application, the directory checks that:</p>
+            <ul class="checklist">
+                <li>the domain answers over HTTPS with a valid certificate, and <code>status.php</code> responds;</li>
+                <li>nodeinfo names Aloha, at or above the minimum supported version;</li>
+                <li>the terms of service, privacy policy and rules load, and the rules list is not empty;</li>
+                <li>an abuse contact is set, and test mail to it does not bounce;</li>
+                <li><code>/api/v2/instance</code> reports the same signup mode (open or approval) as the server's heartbeat;</li>
+                <li>the domain is not on the directory's own block list or on the shared fediverse block lists the curators follow;</li>
+                <li>at least three hourly heartbeats have arrived on time.</li>
+            </ul>
+            <p>Listed servers keep sending a heartbeat every hour. A server that stops sending one is marked full until it is back.</p>
+        </section>
+
+        <section aria-labelledby="review">
+            <h2 id="review">2. Human review</h2>
+            <p>Curators use the same checklist for every server, so decisions stay consistent and can be explained:</p>
+            <dl class="checklist-dl">
+                {% for key, item in initial %}
+                    <div id="initial-{{ key }}">
+                        <dt>{{ item[0] }}</dt>
+                        <dd>{{ item[1] }}</dd>
+                    </div>
+                {% endfor %}
+            </dl>
+            <p>
+                A good server that adds nothing new to the mix can be put on a waiting list instead of being rejected.
+                The server must also agree to the <a href="/covenant/">Aloha Server Covenant</a>.
+            </p>
+            <p class="callout">
+                <strong>Two curators.</strong> Every listing and every delisting needs the agreement of two curators. One curator
+                alone can only pause a server in an urgent case.
+            </p>
+        </section>
+
+        <section aria-labelledby="featured">
+            <h2 id="featured">3. Featured servers</h2>
+            <p>Only featured servers can be suggested as the default choice in the apps. A server can be featured when it:</p>
+            <ul class="checklist">
+                <li>has been listed for at least 90 days;</li>
+                <li>had at least 98% heartbeat availability over the last 30 days;</li>
+                <li>has a short approval wait;</li>
+                <li>has no unresolved complaints.</li>
+            </ul>
+            <p>Curators aim for at least two featured servers for each major language.</p>
+        </section>
+
+        <section aria-labelledby="rereview">
+            <h2 id="rereview">4. Re-reviews every 6 months</h2>
+            <p>Every listed server is reviewed again every 6 months, with a shorter checklist:</p>
+            <dl class="checklist-dl">
+                {% for key, item in rereview %}
+                    <div id="rereview-{{ key }}">
+                        <dt>{{ item[0] }}</dt>
+                        <dd>{{ item[1] }}</dd>
+                    </div>
+                {% endfor %}
+            </dl>
+            <p>
+                Anyone can <a href="/report">report a listed server</a> at any time. Reports go to the curators, and the
+                server admin sees the complaint, without the reporter's identity, and can respond.
+            </p>
+        </section>
+
+        <section aria-labelledby="delisting">
+            <h2 id="delisting">5. Delisting and appeals</h2>
+            <div class="table-wrap">
+                <table>
+                    <caption class="visually-hidden">Steps of a delisting</caption>
+                    <thead>
+                        <tr><th scope="col">Step</th><th scope="col">Who</th><th scope="col">When</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Pause during an investigation (optional)</td><td>One curator</td><td>Immediately</td></tr>
+                        <tr><td>Notice to the admin with the specific concern</td><td>Curators</td><td>Within 24 hours of the pause</td></tr>
+                        <tr><td>Admin's response</td><td>Admin</td><td>14 days</td></tr>
+                        <tr><td>Decision: back to listed, or delisted</td><td>Two curators</td><td>Within 7 days of the response</td></tr>
+                        <tr><td>Public entry in the <a href="/transparency/">transparency log</a> (domain, date, rule broken, short reason)</td><td>Automatic</td><td>When the decision is made</td></tr>
+                        <tr><td>Appeal</td><td>Advisory board</td><td>Within 30 days of the decision</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p>
+                A delisted server may apply again after 6 months. A server withdrawn by its admin can come back at any time
+                through the normal review. When a server is delisted or shuts down, the apps show its users how to move
+                their account.
+            </p>
+        </section>
+    </article>
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends 'console/base.html.twig' %}
+{% import 'console/_macros.html.twig' as m %}
+{% block title %}Complaint about {{ complaint.server.domain }}{% endblock %}
+{% block content %}
+<h1>Complaint about <a href="{{ path('console_server', {domain: complaint.server.domain}) }}">{{ complaint.server.domain }}</a></h1>
+<section class="card">
+    <dl class="facts">
+        <dt>Category</dt><dd>{{ categories[complaint.category] ?? complaint.category }}</dd>
+        <dt>Status</dt><dd>{{ complaint.status.value }}{% if complaint.closedBy %} by {{ complaint.closedBy.displayName }}{% endif %}</dd>
+        <dt>Received</dt><dd>{{ m.date(complaint.createdAt) }}</dd>
+        <dt>Shared with admin</dt><dd>{{ m.date(complaint.sharedAt) }}</dd>
+        <dt>Reporter contact</dt><dd>{{ complaint.reporterEmail ?? 'not given (or removed after retention)' }} <span class="muted">— never shown to the admin</span></dd>
+    </dl>
+    <h2>Text</h2>
+    <p class="pre">{{ complaint.body }}</p>
+    {% if complaint.resolution %}<h2>Resolution</h2><p class="pre">{{ complaint.resolution }}</p>{% endif %}
+</section>
+
+<section class="card">
+    <h2>Conversation with the admin</h2>
+    {% for c in thread %}
+        <article class="comment {{ c.fromServer ? 'from-server' : 'to-admin' }}">
+            <p class="meta">{{ c.fromServer ? 'Server admin' : (c.curator ? c.curator.displayName : 'Curators') }} · {{ m.date(c.createdAt) }}</p>
+            <p class="pre">{{ c.body }}</p>
+        </article>
+    {% else %}<p class="empty">No messages yet.</p>{% endfor %}
+</section>
+
+{% if complaint.status.open %}
+<section class="card">
+    <h2>Actions</h2>
+    {% if complaint.status.value == 'open' %}
+    <form method="post" action="{{ path('console_complaint_action', {id: complaint.id, action: 'share'}) }}">
+        {{ m.csrf() }}<button type="submit">Share with the admin (without the reporter's identity)</button>
+    </form>
+    {% else %}
+    <form method="post" action="{{ path('console_complaint_action', {id: complaint.id, action: 'reply'}) }}" class="stack">
+        {{ m.csrf() }}<label>Message to the admin <textarea name="body" required maxlength="5000" rows="3"></textarea></label>
+        <button type="submit">Send</button>
+    </form>
+    {% endif %}
+    <form method="post" action="{{ path('console_complaint_action', {id: complaint.id, action: 'resolve'}) }}" class="stack">
+        {{ m.csrf() }}<label>Resolution <textarea name="resolution" required maxlength="2000" rows="2"></textarea></label>
+        <div class="inline-forms">
+            <button type="submit">Resolve</button>
+            <button type="submit" class="secondary" formaction="{{ path('console_complaint_action', {id: complaint.id, action: 'dismiss'}) }}">Dismiss</button>
+        </div>
+    </form>
+</section>
+{% endif %}
+{% endblock %}

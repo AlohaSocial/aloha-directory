@@ -1,0 +1,200 @@
+{% extends 'site/base.html.twig' %}
+{% set active = 'keys' %}
+
+{% block title %}Signing keys · Aloha Directory{% endblock %}
+{% block description %}The keys that sign the Aloha Directory lists, and how to verify a list yourself.{% endblock %}
+
+{% block content %}
+    <h1>Signing keys</h1>
+    <p class="lead">
+        The apps do not trust this website or any download location. They trust a signature. Here are the keys, and
+        how you can check a list yourself.
+    </p>
+
+    <nav class="toc" aria-label="On this page">
+        <ul>
+            <li><a href="#root-keys">Root keys</a></li>
+            <li><a href="#key-set">Current key set</a></li>
+            <li><a href="#verify">How to verify a list</a></li>
+        </ul>
+    </nav>
+
+    <section aria-labelledby="root-keys">
+        <h2 id="root-keys">Root keys</h2>
+        <p>
+            The root key is kept offline, on two hardware tokens in two places. It signs only the key set. Its public half
+            is pinned in the Aloha apps and the Aloha server app.
+        </p>
+        {% if root_keys is empty %}
+            <p class="muted">No root key is configured.</p>
+        {% else %}
+            <div class="table-wrap">
+                <table>
+                    <caption class="visually-hidden">Pinned root public keys</caption>
+                    <thead><tr><th scope="col">Key ID</th><th scope="col">Ed25519 public key (base64url)</th></tr></thead>
+                    <tbody>
+                        {% for kid, key in root_keys %}
+                            <tr><td><code>{{ kid }}</code></td><td><code class="key">{{ key }}</code></td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </section>
+
+    <section aria-labelledby="key-set">
+        <h2 id="key-set">Current key set</h2>
+        <p>
+            The list keys sign <code>servers.json</code> and <code>search.json</code>. They are published in
+            <a href="/lists/v1/keys.json"><code>/lists/v1/keys.json</code></a>, signed by a root key. To rotate a list key,
+            a new key set lists both keys and the lists are signed with both for 30 days.
+        </p>
+        {% if keyset is null %}
+            <p class="muted">No verified key set is installed yet.</p>
+        {% else %}
+            <dl class="facts facts-inline">
+                {% if keyset.serial is defined %}<div><dt>Serial</dt><dd>{{ keyset.serial }}</dd></div>{% endif %}
+                {% if keyset.issued_at is defined %}<div><dt>Issued</dt><dd>{{ keyset.issued_at }}</dd></div>{% endif %}
+                {% if keyset.expires_at is defined %}<div><dt>Expires</dt><dd>{{ keyset.expires_at }}</dd></div>{% endif %}
+            </dl>
+            <div class="table-wrap">
+                <table>
+                    <caption class="visually-hidden">List signing keys</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Key ID</th>
+                            <th scope="col">Algorithm</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Public key (base64url)</th>
+                            <th scope="col">Valid until</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for key in keyset.keys|default([]) %}
+                            <tr>
+                                <td><code>{{ key.kid|default('') }}</code></td>
+                                <td>{{ key.alg|default('') }}</td>
+                                <td><span class="status status-{{ key.status|default('unknown') }}">{{ key.status|default('unknown')|capitalize }}</span></td>
+                                <td><code class="key">{{ key.public_key|default('') }}</code></td>
+                                <td>{{ key.not_after is defined ? key.not_after : 'Until revoked' }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </section>
+
+    <section aria-labelledby="verify" class="prose">
+        <h2 id="verify">How to verify a list</h2>
+        <p>Every list file is a small JSON envelope:</p>
+<pre><code>{% verbatim %}{
+  "payload": "&lt;base64url of the canonical JSON list&gt;",
+  "signatures": [
+    {"kid": "aloha-list-2026a", "alg": "Ed25519", "sig": "&lt;base64url&gt;"}
+  ]
+}{% endverbatim %}</code></pre>
+        <p>
+            Base64url here means RFC 4648 section 5, without <code>=</code> padding. The payload is JSON in RFC 8785
+            canonical form, and the signature covers exactly the decoded payload bytes. You never need to re-encode the
+            JSON: verify the bytes, then parse them.
+        </p>
+        <ol class="steps">
+            <li>
+                <strong>Verify the key set.</strong> Download <code>/lists/v1/keys.json</code>. Decode its
+                <code>payload</code>. Find a signature whose <code>alg</code> is <code>Ed25519</code> and whose
+                <code>kid</code> is one of the pinned root keys above, and check it with that key over the decoded payload
+                bytes. Ignore signatures from keys you do not know.
+            </li>
+            <li>
+                <strong>Check the key set's payload.</strong> Parse it as JSON. <code>list</code> must be
+                <code>keys</code>, <code>version</code> must be <code>1</code>, and <code>serial</code> must be a positive
+                whole number.
+            </li>
+            <li>
+                <strong>Collect the list keys.</strong> Keep the keys whose <code>alg</code> is <code>Ed25519</code>,
+                whose <code>status</code> is <code>active</code>, and whose <code>not_after</code>, if present, has not
+                passed. Revoked keys are never trusted.
+            </li>
+            <li>
+                <strong>Verify the list.</strong> Download <code>/lists/v1/servers.json</code> (or
+                <code>search.json</code>). Decode the payload and check that at least one signature verifies with one of
+                the list keys from step 3.
+            </li>
+            <li>
+                <strong>Check the list's payload.</strong> <code>list</code> must be the list you asked for
+                (<code>servers</code> or <code>search</code>), <code>version</code> must be <code>1</code>, and
+                <code>issued_at</code> must not be in the future (a few minutes of clock skew are fine).
+            </li>
+            <li>
+                <strong>Check the serial.</strong> <code>serial</code> must be higher than the serial of the last list
+                you accepted. This stops anyone from replaying an old list that still contained a server which has
+                since been delisted.
+            </li>
+            <li>
+                <strong>Check the age.</strong> A list expires 30 days after <code>issued_at</code>
+                (<code>expires_at</code>). An expired list is still used, but its data is shown as old. Ninety days after
+                <code>issued_at</code>, the apps stop recommending servers from it until they get a fresh list.
+            </li>
+        </ol>
+        <p>
+            If a list fails to verify, fetch the key set again, in case a key was rotated or revoked. Because only the
+            signature matters, you can download the lists from any mirror, such as
+            <a href="https://github.com/alohasocial/directory-lists">alohasocial/directory-lists</a> on GitHub.
+        </p>
+
+        <h3>Example: check a signature with OpenSSL</h3>
+        <p>
+            This checks one signature in <code>servers.json</code> with OpenSSL 3 or newer, <code>jq</code> and
+            <code>xxd</code>. Set <code>KID</code> and <code>KEY</code> to a list key from the table above. It checks
+            the signature only; do steps 5 to 7 by reading the printed payload.
+        </p>
+<pre><code>{% verbatim %}KID='aloha-list-2026a'      # key ID from keys.json
+KEY='&lt;base64url public key&gt;' # public_key from keys.json
+
+b64url_decode() {
+  s=$(tr -- '-_' '+/')
+  while [ $(( ${#s} % 4 )) -ne 0 ]; do s="$s="; done
+  printf '%s' "$s" | openssl base64 -d -A
+}
+
+jq -r '.payload' servers.json | b64url_decode &gt; payload.bin
+jq -r --arg kid "$KID" '.signatures[] | select(.kid == $kid) | .sig' servers.json \
+  | b64url_decode &gt; sig.bin
+
+# Wrap the raw 32-byte Ed25519 key in a DER public key structure
+{ printf '302a300506032b6570032100' | xxd -r -p; printf '%s' "$KEY" | b64url_decode; } &gt; key.der
+
+openssl pkeyutl -verify -pubin -keyform DER -inkey key.der \
+  -rawin -in payload.bin -sigfile sig.bin   # "Signature Verified Successfully"
+
+jq '{list, version, serial, issued_at, expires_at}' payload.bin{% endverbatim %}</code></pre>
+
+        <h3>The same in pseudo-code</h3>
+<pre><code>{% verbatim %}function open(envelopeJson, trustedKeys, expectedList, lastSerial):
+    env   = parseJson(envelopeJson)
+    bytes = base64urlDecode(env.payload)          # strict, no padding
+    ok = any(s.alg == "Ed25519" and s.kid in trustedKeys
+             and ed25519Verify(trustedKeys[s.kid], bytes, base64urlDecode(s.sig))
+             for s in env.signatures)
+    if not ok: fail("no valid signature from a trusted key")
+    p = parseJson(bytes)
+    require p.list == expectedList and p.version == 1
+    require lastSerial is none or p.serial &gt; lastSerial
+    require p.issued_at &lt;= now + 5 minutes
+    return p
+
+keySet   = open(fetch("/lists/v1/keys.json"), PINNED_ROOT_KEYS, "keys", lastKeySerial)
+listKeys = {k.kid: base64urlDecode(k.public_key) for k in keySet.keys
+            if k.alg == "Ed25519" and k.status == "active"
+            and (k.not_after is missing or k.not_after &gt;= now)}
+servers  = open(fetch("/lists/v1/servers.json"), listKeys, "servers", lastServerSerial)
+expired  = servers.expires_at &lt; now                 # still usable, shown as old
+tooOld   = servers.issued_at + 90 days &lt; now        # stop recommending servers{% endverbatim %}</code></pre>
+
+        <p>
+            The reference implementation is part of the directory's <a href="https://github.com/AlohaSocial/aloha-directory">source code</a>.
+            You can run it with <code>bin/console app:lists:verify servers.json --keyset=keys.json</code>.
+        </p>
+    </section>
+{% endblock %}

@@ -1,0 +1,10 @@
+framework:
+    cache:
+        prefix_seed: alohasocial/directory
+
+when@prod:
+    framework:
+        cache:
+            # Rate limiter state must be shared by all application hosts.
+            app: cache.adapter.doctrine_dbal
+            default_doctrine_dbal_provider: doctrine.dbal.default_connection

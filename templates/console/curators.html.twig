@@ -1,0 +1,63 @@
+{% extends 'console/base.html.twig' %}
+{% import 'console/_macros.html.twig' as m %}
+{% block title %}Curators{% endblock %}
+{% block content %}
+<h1>Curators</h1>
+{% if invite_url %}
+    <p class="flash flash-info" role="status">Invitation link (shown once, valid 72 hours): <span class="mono">{{ invite_url }}</span></p>
+{% endif %}
+<table>
+    <thead><tr><th>Name</th><th>E-mail</th><th>Role</th><th>Status</th><th>Last sign-in</th><th>Actions</th></tr></thead>
+    <tbody>
+    {% for c in curators %}
+        <tr>
+            <td>{{ c.displayName }}</td>
+            <td>{{ c.email }}</td>
+            <td>{{ c.admin ? 'admin' : 'curator' }}</td>
+            <td>{{ c.active ? 'active' : 'deactivated' }}</td>
+            <td>{{ m.date(c.lastLoginAt) }}</td>
+            <td class="inline-forms">
+                {% if c.id != me.id %}
+                    <form method="post" action="{{ path('console_curators_action', {id: c.id, action: c.active ? 'deactivate' : 'activate'}) }}">{{ m.csrf() }}<button type="submit" class="secondary">{{ c.active ? 'Deactivate' : 'Activate' }}</button></form>
+                    <form method="post" action="{{ path('console_curators_action', {id: c.id, action: c.admin ? 'remove-admin' : 'make-admin'}) }}">{{ m.csrf() }}<button type="submit" class="secondary">{{ c.admin ? 'Remove admin' : 'Make admin' }}</button></form>
+                {% else %}<span class="muted">you</span>{% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<div class="grid2">
+<section class="card">
+    <h2>Invite a curator</h2>
+    <form method="post" action="{{ path('console_curators_invite') }}" class="stack">
+        {{ m.csrf() }}
+        <label>Name <input type="text" name="name" required maxlength="100"></label>
+        <label>E-mail <input type="email" name="email" required maxlength="180"></label>
+        <label class="check"><input type="checkbox" name="admin" value="1"> Admin (can manage curators)</label>
+        <button type="submit">Create invitation</button>
+    </form>
+    {% if invites is not empty %}
+        <h3>Open invitations</h3>
+        <ul>{% for i in invites %}<li>{{ i.email }} · expires {{ m.date(i.expiresAt) }}</li>{% endfor %}</ul>
+    {% endif %}
+</section>
+
+<section class="card">
+    <h2>Conflicts of interest</h2>
+    <ul>
+    {% for c in conflicts %}
+        <li>{{ c.curator.displayName }} — <a href="{{ path('console_server', {domain: c.server.domain}) }}">{{ c.server.domain }}</a>: {{ c.note }}
+            <form method="post" action="{{ path('console_curators_conflict_remove', {id: c.id}) }}" class="inline">{{ m.csrf() }}<button type="submit" class="link">remove</button></form></li>
+    {% else %}<li class="empty">None recorded.</li>{% endfor %}
+    </ul>
+    <form method="post" action="{{ path('console_curators_conflict') }}" class="stack">
+        {{ m.csrf() }}
+        <label>Curator <select name="curator">{% for c in curators|filter(c => c.active) %}<option value="{{ c.id }}">{{ c.displayName }}</option>{% endfor %}</select></label>
+        <label>Server domain <input type="text" name="domain" required></label>
+        <label>Note <input type="text" name="note" required maxlength="500"></label>
+        <button type="submit">Record conflict</button>
+    </form>
+</section>
+</div>
+{% endblock %}

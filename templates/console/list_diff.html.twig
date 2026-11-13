@@ -1,0 +1,15 @@
+{% extends 'console/base.html.twig' %}
+{% import 'console/_profile.html.twig' as p %}
+{% block title %}{{ a.list }}.json {{ a.serial }} → {{ b.serial }}{% endblock %}
+{% block content %}
+<h1>{{ a.list }}.json: serial {{ a.serial }} → {{ b.serial }}</h1>
+<section class="card">
+    <h2>Added</h2>
+    {% if diff.added is empty %}<p class="empty">None.</p>{% else %}<ul>{% for d in diff.added %}<li>{{ d }}</li>{% endfor %}</ul>{% endif %}
+    <h2>Removed</h2>
+    {% if diff.removed is empty %}<p class="empty">None.</p>{% else %}<ul>{% for d in diff.removed %}<li>{{ d }}</li>{% endfor %}</ul>{% endif %}
+    <h2>Changed</h2>
+    {% for key, rows in diff.changed %}<h3>{{ key }}</h3>{{ p.diff(rows) }}{% else %}<p class="empty">No entry changed.</p>{% endfor %}
+</section>
+<p><a href="{{ path('console_lists', {list: a.list}) }}">Back to the list history</a></p>
+{% endblock %}

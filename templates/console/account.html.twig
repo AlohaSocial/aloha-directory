@@ -1,0 +1,75 @@
+{% extends 'console/base.html.twig' %}
+{% import 'console/_macros.html.twig' as m %}
+{% block title %}Account{% endblock %}
+{% macro confirm(with_recovery) %}
+    <label>Password <input type="password" name="password" required autocomplete="current-password"></label>
+    <input type="hidden" name="passkey" value="">
+    {% if with_recovery %}
+        <details>
+            <summary>Lost your passkey?</summary>
+            <label>Recovery code instead <input type="text" name="recovery_code" autocomplete="off" maxlength="14"></label>
+        </details>
+    {% endif %}
+    <p class="hint" data-passkey-status role="status" aria-live="polite"></p>
+{% endmacro %}
+{% import _self as a %}
+{% block content %}
+<h1>Your account</h1>
+<p>{{ me.displayName }} · {{ me.email }} · {{ me.admin ? 'admin' : 'curator' }} · {{ recovery_left }} recovery codes left</p>
+
+<section class="card">
+    <h2>Passkeys</h2>
+    <table>
+        <thead><tr><th>Name</th><th>Added</th><th>Last used</th></tr></thead>
+        <tbody>
+        {% for p in passkeys %}
+            <tr><td>{{ p.name }}</td><td>{{ m.date(p.createdAt) }}</td><td>{{ p.lastUsedAt ? m.date(p.lastUsedAt) : 'never' }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <p class="hint">Keep at least two passkeys (for example your phone and a security key), so losing one device does not lock you out.</p>
+</section>
+
+<div class="grid3">
+<section class="card">
+    <h2>Add a passkey</h2>
+    <form method="post" class="stack" data-passkey-get="{{ confirm_options }}" data-passkey-create="{{ create_options }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token('console') }}"><input type="hidden" name="form" value="add_passkey">
+        <label>Name <input type="text" name="name" required maxlength="64" placeholder="for example: security key"></label>
+        <input type="hidden" name="attestation" value="">
+        {{ a.confirm(true) }}
+        <button type="submit">Add passkey</button>
+    </form>
+</section>
+{% if passkeys|length > 1 %}
+<section class="card">
+    <h2>Remove a passkey</h2>
+    <form method="post" class="stack" data-passkey-get="{{ confirm_options }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token('console') }}"><input type="hidden" name="form" value="remove_passkey">
+        <label>Passkey <select name="passkey_id" required>{% for p in passkeys %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></label>
+        {{ a.confirm(true) }}
+        <button type="submit" class="secondary">Remove passkey</button>
+    </form>
+</section>
+{% endif %}
+<section class="card">
+    <h2>Change password</h2>
+    <form method="post" class="stack" data-passkey-get="{{ confirm_options }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token('console') }}"><input type="hidden" name="form" value="password">
+        <label>New password (at least {{ min_length }} characters) <input type="password" name="new_password" required minlength="{{ min_length }}" autocomplete="new-password"></label>
+        <label>Repeat new password <input type="password" name="new_password_repeat" required minlength="{{ min_length }}" autocomplete="new-password"></label>
+        {{ a.confirm(true) }}
+        <button type="submit">Change password</button>
+    </form>
+</section>
+<section class="card">
+    <h2>Recovery codes</h2>
+    <p>New codes replace all old ones. This needs a passkey.</p>
+    <form method="post" class="stack" data-passkey-get="{{ confirm_options }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token('console') }}"><input type="hidden" name="form" value="recovery">
+        {{ a.confirm(false) }}
+        <button type="submit">Create new recovery codes</button>
+    </form>
+</section>
+</div>
+{% endblock %}

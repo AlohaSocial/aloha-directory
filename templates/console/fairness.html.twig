@@ -1,0 +1,47 @@
+{% extends 'console/base.html.twig' %}
+{% block title %}Fairness{% endblock %}
+{% block content %}
+<h1>How newcomers spread</h1>
+<p>Apps suggest a featured server in the person's language, picked at random among the best matches. The directory never sees a signup, but heartbeats report each server's account total, so it can see who gained how many accounts in the last {{ report.window_days }} days. Within a language, a server that gains more than {{ tolerance }}% of its fair share gets a <code>balance</code> factor below 1 in the list (recomputed daily, moving halfway each day). Balancing starts once a language has at least two featured servers and {{ min_sample }} new accounts.</p>
+
+<div class="grid3">
+    <section class="card"><h2>New accounts</h2><p class="big">{{ report.total_new_accounts }}</p><p class="muted">on {{ report.featured }} featured servers</p></section>
+    <section class="card"><h2>Largest server</h2><p class="big">{{ (report.top_share * 100)|round }}%</p><p class="muted">top three: {{ (report.top3_share * 100)|round }}%</p></section>
+    <section class="card"><h2>Concentration</h2><p class="big">{{ report.hhi|number_format(2) }}</p><p class="muted">Herfindahl index; {{ report.featured > 0 ? (1 / report.featured)|number_format(2) : '–' }} would be perfectly even</p></section>
+</div>
+
+<h2>By language</h2>
+<table>
+    <thead><tr><th>Language</th><th>Featured servers</th><th>New accounts</th><th>Largest share</th><th>Index</th><th>Balancing</th></tr></thead>
+    <tbody>
+    {% for code, c in report.cohorts %}
+        <tr><td>{{ code }}</td><td>{{ c.servers }}</td><td>{{ c.new_accounts }}</td><td>{{ (c.top_share * 100)|round }}%</td><td>{{ c.hhi|number_format(2) }}</td><td>{{ c.balancing ? 'yes' : 'no (too few servers or newcomers)' }}</td></tr>
+    {% else %}<tr><td colspan="6" class="empty">No featured servers.</td></tr>{% endfor %}
+    </tbody>
+</table>
+
+<h2>By hosting country</h2>
+<table>
+    <thead><tr><th>Country</th><th>Featured servers</th><th>New accounts</th><th>Share</th></tr></thead>
+    <tbody>
+    {% for code, c in report.countries %}
+        <tr><td>{{ code }}</td><td>{{ c.servers }}</td><td>{{ c.new_accounts }}</td><td>{{ (c.share * 100)|round }}%</td></tr>
+    {% else %}<tr><td colspan="4" class="empty">No data.</td></tr>{% endfor %}
+    </tbody>
+</table>
+
+<h2>Servers</h2>
+<table>
+    <thead><tr><th>Server</th><th>Language</th><th>New accounts</th><th>Share in language</th><th>Fair share</th><th>Balance now</th><th>Target</th></tr></thead>
+    <tbody>
+    {% for domain, s in report.servers %}
+        <tr>
+            <td><a href="{{ path('console_server', {domain: domain}) }}">{{ s.name }}</a></td>
+            <td>{{ s.cohort }}</td><td>{{ s.new_accounts }}</td>
+            <td>{{ (s.share_in_cohort * 100)|round }}%</td><td>{{ (s.fair_share * 100)|round }}%</td>
+            <td>{{ s.balance }}%</td><td>{{ s.target_balance }}%</td>
+        </tr>
+    {% else %}<tr><td colspan="7" class="empty">No featured servers.</td></tr>{% endfor %}
+    </tbody>
+</table>
+{% endblock %}

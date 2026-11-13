@@ -1,0 +1,36 @@
+# All values come from config.php (see config.sample.php); nothing here needs editing for a deployment.
+framework:
+    secret: '%env(APP_SECRET)%'
+    http_method_override: false
+    handle_all_throwables: true
+    trusted_proxies: '%env(default::TRUSTED_PROXIES)%'
+    trusted_headers: ['x-forwarded-for', 'x-forwarded-proto', 'x-forwarded-port']
+
+    # Sessions are used by the curator console only.
+    session:
+        name: aloha_directory_console
+        cookie_secure: auto
+        cookie_httponly: true
+        cookie_samesite: strict
+        cookie_lifetime: 0
+        gc_maxlifetime: 1800
+
+    http_client:
+        default_options:
+            max_redirects: 0
+
+    php_errors:
+        log: true
+
+when@prod:
+    framework:
+        session:
+            # Shared between application hosts (concept 13.1: two VMs).
+            handler_id: '%env(DATABASE_URL)%'
+            cookie_secure: true
+
+when@test:
+    framework:
+        test: true
+        session:
+            storage_factory_id: session.storage.factory.mock_file

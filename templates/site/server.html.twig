@@ -1,0 +1,292 @@
+{% extends 'site/base.html.twig' %}
+{% set active = 'servers' %}
+{% set capacity_labels = {plenty: 'Plenty of places', some: 'Places available', few: 'A few places left', full: 'Full'} %}
+{% set wait_labels = {none: 'No wait', short: 'Short wait', long: 'Longer wait'} %}
+{% set mode_labels = {open: 'Open signup', approval: 'Signup with approval'} %}
+{% set signup_state_labels = {open: 'Open for new accounts', closed: 'Not taking new accounts right now', unavailable: 'Temporarily unavailable (no recent heartbeat)'} %}
+{% set state_labels = {listed: 'Listed', featured: 'Featured', full: 'Listed, currently full'} %}
+{% set operator_types = {person: 'Individual', association: 'Association', company: 'Company', public_body: 'Public body'} %}
+{% set feature_labels = {dm: 'Direct messages', shorts: 'Short videos', video: 'Video'} %}
+{% set base = media_base|default('/media/') %}
+{% set name = server.name|default(server.domain) %}
+
+{% macro ext_link(url, text) %}
+    {%- if url starts with 'https://' or url starts with 'http://' -%}
+        <a href="{{ url }}" rel="nofollow noopener">{{ text|default(url) }}</a>
+    {%- else -%}
+        {{ text|default(url) }}
+    {%- endif -%}
+{% endmacro %}
+
+{% macro size(mb) %}
+    {%- if mb >= 1024 -%}
+        {{ (mb / 1024)|round(1)|number_format(mb % 1024 == 0 ? 0 : 1) }} GB
+    {%- else -%}
+        {{ mb }} MB
+    {%- endif -%}
+{% endmacro %}
+
+{% import _self as m %}
+
+{% block title %}{{ name }} · Aloha Directory{% endblock %}
+{% block description %}{{ server.description|default('An Aloha server listed in the Aloha Directory.') }}{% endblock %}
+
+{% block content %}
+    {% set signup = server.signup|default({}) %}
+    {% set mode = signup.mode|default('approval') %}
+    {% set region = server.region|default({}) %}
+    {% set operator = server.operator|default({}) %}
+    {% set moderation = server.moderation|default({}) %}
+    {% set account = server.account|default({}) %}
+
+    <p class="breadcrumb"><a href="/">&larr; All servers</a></p>
+
+    <article class="server-detail" aria-labelledby="server-title">
+        {% if server.banner is defined and server.banner is not null and server.banner starts with 'sha256:' %}
+            <img class="banner" src="{{ base ~ server.banner|slice(7) ~ '.webp' }}" alt="" width="1200" height="300">
+        {% endif %}
+
+        <header class="detail-head">
+            {% if server.logo is defined and server.logo is not null and server.logo starts with 'sha256:' %}
+                <img class="logo logo-large" src="{{ base ~ server.logo|slice(7) ~ '.webp' }}" alt="" width="88" height="88">
+            {% else %}
+                <span class="logo logo-large logo-placeholder" aria-hidden="true">{{ name|first|upper }}</span>
+            {% endif %}
+            <div>
+                <h1 id="server-title">{{ name }}</h1>
+                <p class="domain">{{ server.domain }}</p>
+                {% set is_featured = server.state|default('') == 'featured' %}
+                {% if is_featured or server.atproto is defined %}
+                    <ul class="badges" aria-label="Badges">
+                        {% if is_featured %}<li class="badge badge-featured">Featured</li>{% endif %}
+                        {% if server.atproto is defined %}<li class="badge badge-bluesky">Also on Bluesky</li>{% endif %}
+                    </ul>
+                {% endif %}
+            </div>
+        </header>
+
+        {% if server.description|default('') is not empty %}
+            <p class="lead">{{ server.description }}</p>
+        {% endif %}
+        {% if server.long_description is defined and server.long_description is not empty %}
+            <div class="prose preserve-lines">{{ server.long_description }}</div>
+        {% endif %}
+
+        <p class="callout">
+            To join {{ name }}, open the Aloha app and choose this server during signup. The app talks to the server
+            directly; the directory never learns who signs up where.
+        </p>
+
+        <div class="detail-grid">
+            <section class="panel" aria-labelledby="h-signup">
+                <h2 id="h-signup">Signing up</h2>
+                <dl class="facts">
+                    <div><dt>Signup mode</dt><dd>{{ mode_labels[mode]|default(mode) }}</dd></div>
+                    {% if signup.state is defined %}
+                        <div><dt>Right now</dt><dd>{{ signup_state_labels[signup.state]|default(signup.state) }}</dd></div>
+                    {% endif %}
+                    <div><dt>Places</dt><dd><span class="capacity capacity-{{ signup.capacity|default('full') }}">{{ capacity_labels[signup.capacity|default('full')]|default(signup.capacity|default('')) }}</span></dd></div>
+                    {% if mode == 'approval' and signup.approval_wait is defined %}
+                        <div><dt>Approval wait</dt><dd>{{ wait_labels[signup.approval_wait]|default(signup.approval_wait) }}</dd></div>
+                    {% endif %}
+                    {% if signup.email_required is defined %}
+                        <div><dt>Email address</dt><dd>{{ signup.email_required ? 'Required' : 'Not required' }}</dd></div>
+                    {% endif %}
+                    {% if server.min_age is defined %}
+                        <div><dt>Minimum age</dt><dd>{{ server.min_age }}</dd></div>
+                    {% endif %}
+                </dl>
+            </section>
+
+            <section class="panel" aria-labelledby="h-audience">
+                <h2 id="h-audience">Who it is for</h2>
+                <dl class="facts">
+                    <div><dt>Languages</dt><dd>{{ server.languages|default([]) is empty ? 'Not stated' : server.languages|join(', ') }}</dd></div>
+                    <div><dt>Topic</dt><dd>{{ server.topic|default('general')|capitalize }}</dd></div>
+                    {% if server.audience is defined and server.audience is not empty %}
+                        <div><dt>Audience</dt><dd>{{ server.audience }}</dd></div>
+                    {% endif %}
+                </dl>
+            </section>
+
+            <section class="panel" aria-labelledby="h-moderation">
+                <h2 id="h-moderation">Moderation</h2>
+                <dl class="facts">
+                    {% if moderation.moderators is defined %}
+                        <div><dt>Moderators</dt><dd>{{ moderation.moderators }}</dd></div>
+                    {% endif %}
+                    {% if moderation.response_hours is defined %}
+                        <div><dt>Reply to reports</dt><dd>Within {{ moderation.response_hours }} hours</dd></div>
+                    {% endif %}
+                    {% if moderation.policy_url is defined %}
+                        <div><dt>Moderation policy</dt><dd>{{ m.ext_link(moderation.policy_url, 'Read the policy') }}</dd></div>
+                    {% endif %}
+                </dl>
+            </section>
+
+            <section class="panel" aria-labelledby="h-region">
+                <h2 id="h-region">Where it is</h2>
+                <dl class="facts">
+                    <div><dt>Hosted in</dt><dd>{{ region.hosting|default('Not stated') }}</dd></div>
+                    <div><dt>Operator based in</dt><dd>{{ region.operator_seat|default('Not stated') }}</dd></div>
+                    <div>
+                        <dt>GDPR applies</dt>
+                        <dd>
+                            {%- if region.gdpr is defined and region.gdpr is same as(true) -%}Yes
+                            {%- elseif region.gdpr is defined and region.gdpr is same as(false) -%}No
+                            {%- else -%}Not stated{%- endif -%}
+                        </dd>
+                    </div>
+                </dl>
+            </section>
+
+            <section class="panel" aria-labelledby="h-operator">
+                <h2 id="h-operator">Who runs it</h2>
+                <dl class="facts">
+                    <div><dt>Operator</dt><dd>{{ operator.name|default('Not stated') }}</dd></div>
+                    {% if operator.type is defined %}
+                        <div><dt>Type</dt><dd>{{ operator_types[operator.type]|default(operator.type) }}</dd></div>
+                    {% endif %}
+                    {% if operator.website is defined %}
+                        <div><dt>Website</dt><dd>{{ m.ext_link(operator.website) }}</dd></div>
+                    {% endif %}
+                    {% if operator.funding is defined %}
+                        <div><dt>Funding</dt><dd>{{ operator.funding }}</dd></div>
+                    {% endif %}
+                    {% if operator.commitment_until is defined %}
+                        <div><dt>Committed to run until</dt><dd>{{ operator.commitment_until }}</dd></div>
+                    {% endif %}
+                    {% if operator.shutdown_notice_months is defined %}
+                        <div><dt>Shutdown notice</dt><dd>At least {{ operator.shutdown_notice_months }} months</dd></div>
+                    {% endif %}
+                </dl>
+            </section>
+
+            <section class="panel" aria-labelledby="h-account">
+                <h2 id="h-account">Your account</h2>
+                <dl class="facts">
+                    {% if account.storage_mb is defined %}
+                        <div><dt>Storage</dt><dd>{{ m.size(account.storage_mb) }}</dd></div>
+                    {% endif %}
+                    {% if account.media_mb is defined %}
+                        <div><dt>Media storage</dt><dd>{{ m.size(account.media_mb) }}</dd></div>
+                    {% endif %}
+                    <div>
+                        <dt>Features</dt>
+                        <dd>
+                            {%- if account.features|default([]) is empty -%}
+                                Posts and photos
+                            {%- else -%}
+                                {%- for feature in account.features -%}
+                                    {{ feature_labels[feature]|default(feature) }}{{ not loop.last ? ', ' }}
+                                {%- endfor -%}
+                            {%- endif -%}
+                        </dd>
+                    </div>
+                </dl>
+            </section>
+
+            {% if server.atproto is defined %}
+                <section class="panel" aria-labelledby="h-bluesky">
+                    <h2 id="h-bluesky">Bluesky</h2>
+                    <p>Accounts on this server also get a Bluesky identity, so people on Bluesky can follow you.</p>
+                    <dl class="facts">
+                        {% if server.atproto.handle_example is defined %}
+                            <div><dt>Example handle</dt><dd><code>{{ server.atproto.handle_example }}</code></dd></div>
+                        {% endif %}
+                        <div><dt>Move your Bluesky identity away</dt><dd>{{ server.atproto.move_away|default(false) ? 'Supported' : 'Not supported' }}</dd></div>
+                    </dl>
+                </section>
+            {% endif %}
+
+            <section class="panel" aria-labelledby="h-listing">
+                <h2 id="h-listing">In the directory</h2>
+                <dl class="facts">
+                    <div><dt>Status</dt><dd>{{ state_labels[server.state|default('listed')]|default(server.state|default('Listed')) }}</dd></div>
+                    {% if server.listed_since is defined %}
+                        <div><dt>Listed since</dt><dd>{{ server.listed_since }}</dd></div>
+                    {% endif %}
+                    {% if server.reviewed_at is defined %}
+                        <div><dt>Last reviewed</dt><dd>{{ server.reviewed_at }}</dd></div>
+                    {% endif %}
+                    {% if server.weight is defined %}
+                        <div><dt>Curator weight</dt><dd>{{ server.weight }}</dd></div>
+                    {% endif %}
+                    {% if server.balance is defined and server.balance < 1 %}
+                        <div><dt>Balance</dt><dd>{{ server.balance }}</dd></div>
+                    {% endif %}
+                </dl>
+                <p class="small muted">The weight sets how often the apps suggest this server. {% if server.balance is defined and server.balance < 1 %}The balance below 1 means it recently welcomed many more newcomers than other servers in its language, so the apps suggest it a little less for now. {% endif %}Servers are reviewed again every 6 months.</p>
+            </section>
+        </div>
+
+        {% if history %}
+            <section class="reliability" aria-labelledby="h-reliability">
+                <h2 id="h-reliability">Reliability</h2>
+                <p>
+                    Servers report to the directory every hour, and the directory checks them on its own every hour.
+                    {% if history.uptime_90 is not null %}Over the last 90 days this server reported in <strong>{{ history.uptime_90 }}%</strong> of all hours{% if history.uptime_30 is not null %} ({{ history.uptime_30 }}% in the last 30 days){% endif %}.{% endif %}
+                </p>
+                <figure class="uptime">
+                    <svg viewBox="0 0 540 64" width="540" height="64" role="img" aria-labelledby="uptime-title" preserveAspectRatio="none">
+                        <title id="uptime-title">Hourly reports per day over the last 90 days</title>
+                        {% for d in history.uptime %}
+                            {% set x = (loop.index0 * 6) %}
+                            {% if d.percent is null %}
+                                <rect class="up-none" x="{{ x }}" y="60" width="5" height="4"><title>{{ d.day }}: not listed yet</title></rect>
+                            {% else %}
+                                {% set h = max(3, (d.percent * 0.64)|round) %}
+                                <rect class="{{ d.percent >= 99 ? 'up-good' : (d.percent >= 90 ? 'up-ok' : 'up-bad') }}" x="{{ x }}" y="{{ 64 - h }}" width="5" height="{{ h }}"><title>{{ d.day }}: {{ d.percent }}%</title></rect>
+                            {% endif %}
+                        {% endfor %}
+                    </svg>
+                    <figcaption class="small muted">Each bar is one day, from {{ history.uptime|first.day }} to today. Hover over a bar for the date and value.</figcaption>
+                </figure>
+
+                {% if history.checks is not empty %}
+                    <h3>Automatic checks, last 30 days</h3>
+                    <table class="check-history">
+                        <thead><tr><th scope="col">Check</th><th scope="col">Now</th><th scope="col">Daily results <span class="small muted">(oldest left)</span></th></tr></thead>
+                        <tbody>
+                        {% for c in history.checks %}
+                            <tr>
+                                <th scope="row">{{ c.label }}</th>
+                                <td>{% if c.current is same as(true) %}<span class="check-pass">Passing</span>{% elseif c.current is same as(false) %}<span class="check-fail">Failing</span>{% else %}–{% endif %}</td>
+                                <td><span class="check-days">{% for d in c.days %}<span class="day day-{{ d.state }}" title="{{ d.day }}: {{ {pass: 'passed', fail: 'failed', mixed: 'passed and failed', none: 'not checked'}[d.state] }}"></span>{% endfor %}</span></td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    <p class="small muted">Green: passed every time that day. Red: failed every time. Amber: some of both. See the <a href="/criteria/">listing criteria</a> for what is checked.</p>
+                {% endif %}
+            </section>
+        {% endif %}
+
+        <section aria-labelledby="h-rules">
+            <h2 id="h-rules">Server rules</h2>
+            {% if server.rules|default([]) is empty %}
+                <p>This server has not published a rules list here. See its terms below.</p>
+            {% else %}
+                <ol class="rules">
+                    {% for rule in server.rules %}
+                        <li>{{ rule }}</li>
+                    {% endfor %}
+                </ol>
+            {% endif %}
+        </section>
+
+        <section aria-labelledby="h-terms">
+            <h2 id="h-terms">Terms and policies</h2>
+            <ul class="link-list">
+                {% if server.terms_url is defined %}<li>{{ m.ext_link(server.terms_url, 'Terms of service') }}</li>{% endif %}
+                {% if server.privacy_url is defined %}<li>{{ m.ext_link(server.privacy_url, 'Privacy policy') }}</li>{% endif %}
+                {% if moderation.policy_url is defined %}<li>{{ m.ext_link(moderation.policy_url, 'Moderation policy') }}</li>{% endif %}
+            </ul>
+            <p class="small muted">These documents are published by the server, not by the directory.</p>
+        </section>
+
+        <aside class="report-hint" aria-label="Report this server">
+            <p>Something wrong with this server? <a href="/report">Report it to the curators</a>. The server admin sees what you write, but never who you are.</p>
+        </aside>
+    </article>
+{% endblock %}

@@ -1,0 +1,30 @@
+# Background jobs (concept 13.1). The queues live in the database, so no extra service is needed;
+# `bin/console messenger:consume verify checks` runs in the "worker" container and takes the
+# verify queue first (an admin is waiting for it).
+framework:
+    messenger:
+        failure_transport: failed
+        buses:
+            messenger.bus.default:
+                middleware:
+                    - doctrine_ping_connection   # the entity manager is cleared after every message by DoctrineBundle
+        transports:
+            verify:
+                dsn: 'doctrine://default?queue_name=verify&auto_setup=0'
+                # The admin sees the result and simply tries again.
+                retry_strategy: { max_retries: 0 }
+            checks:
+                dsn: 'doctrine://default?queue_name=checks&auto_setup=0'
+                retry_strategy: { max_retries: 1, delay: 300000 }
+            failed: 'doctrine://default?queue_name=failed&auto_setup=0'
+        routing:
+            App\Message\VerifyEnrolment: verify
+            App\Message\CheckServer: checks
+
+when@test:
+    framework:
+        messenger:
+            transports:
+                verify: 'test-queue://verify'
+                checks: 'test-queue://checks'
+                failed: 'test-queue://failed'

@@ -1,0 +1,66 @@
+{% extends 'console/base.html.twig' %}
+{% import 'console/_macros.html.twig' as m %}
+{% block title %}List builds{% endblock %}
+{% block content %}
+<h1>List builds</h1>
+{% for name, c in current %}{% if c.state and c.state.heldSince %}
+<section class="card highlight" role="alert">
+    <h2>{{ name }}.json is held by the change guard</h2>
+    <p>Since {{ m.date(c.state.heldSince) }}, the new build would add {{ c.state.heldSummary.added|length }} and remove {{ c.state.heldSummary.removed|length }} of {{ c.state.heldSummary.before }} entries at once. The previous list stays published (and re-signed) until you release the change or it goes away by itself. Check for an outage of the directory's network, a bug, or an attack before releasing.</p>
+    {% if c.state.heldSummary.added is not empty %}<p><strong>Added:</strong> {% for d in c.state.heldSummary.added %}<a href="{{ path('console_server', {domain: d}) }}">{{ d }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+    {% if c.state.heldSummary.removed is not empty %}<p><strong>Removed:</strong> {% for d in c.state.heldSummary.removed %}<a href="{{ path('console_server', {domain: d}) }}">{{ d }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+    <form method="post" action="{{ path('console_lists_release', {list: name}) }}" class="inline-forms">
+        {{ m.csrf() }}<input type="hidden" name="held_hash" value="{{ c.state.heldHash }}">
+        <label>Why is this change intended? <input type="text" name="reason" required maxlength="1000"></label>
+        <button type="submit">Release and publish</button>
+    </form>
+</section>
+{% endif %}{% endfor %}
+<div class="grid3">
+{% for name, c in current %}
+    <section class="card">
+        <h2>{{ name }}.json</h2>
+        {% if c.build %}
+            <dl class="facts">
+                <dt>Serial</dt><dd><a href="{{ path('console_list_build', {id: c.build.id}) }}">{{ c.build.serial }}</a></dd>
+                <dt>Issued</dt><dd>{{ m.date(c.build.issuedAt) }}</dd>
+                <dt>Expires</dt><dd>{{ m.date(c.build.expiresAt) }}</dd>
+                <dt>Entries</dt><dd>{{ c.build.entryCount }}</dd>
+                <dt>Signed by</dt><dd class="mono small">{{ c.build.keyIds|join(', ') }}</dd>
+                {% if c.state and c.state.heldSince %}<dt>Held</dt><dd>since {{ m.date(c.state.heldSince) }}</dd>{% endif %}
+                {% if c.state and c.state.changePendingSince %}<dt>Change pending</dt><dd>since {{ m.date(c.state.changePendingSince) }}</dd>{% endif %}
+            </dl>
+        {% else %}<p class="empty">Not published yet.</p>{% endif %}
+    </section>
+{% endfor %}
+</div>
+<form method="post" action="{{ path('console_lists_rebuild') }}">
+    {{ m.csrf() }}<button type="submit">Rebuild and re-sign now</button>
+</form>
+
+<h2>History</h2>
+<nav class="tabs">
+    {% for name in ['servers', 'search', 'keys'] %}<a href="{{ path('console_lists', {list: name}) }}" {% if list.value == name %}aria-current="page"{% endif %}>{{ name }}</a>{% endfor %}
+</nav>
+<form method="get" action="{{ path('console_lists_diff') }}">
+<table>
+    <thead><tr><th>A</th><th>B</th><th>Serial</th><th>Issued</th><th>Entries</th><th>Reason</th><th>SHA-256</th></tr></thead>
+    <tbody>
+    {% for row in history %}
+        <tr>
+            <td><input type="radio" name="a" value="{{ row.id }}" aria-label="Compare from {{ row.serial }}" {% if loop.index == 2 %}checked{% endif %}></td>
+            <td><input type="radio" name="b" value="{{ row.id }}" aria-label="Compare to {{ row.serial }}" {% if loop.first %}checked{% endif %}></td>
+            <td><a href="{{ path('console_list_build', {id: row.id}) }}">{{ row.serial }}</a></td>
+            <td>{{ m.date(row.issuedAt) }}</td>
+            <td>{{ row.entryCount }}</td>
+            <td>{{ row.reason }}</td>
+            <td class="mono small" title="{{ row.envelopeSha256 }}">{{ row.envelopeSha256|slice(0, 16) }}…</td>
+        </tr>
+    {% else %}<tr><td colspan="7" class="empty">No builds yet.</td></tr>{% endfor %}
+    </tbody>
+</table>
+{% if history|length > 1 %}<button type="submit" class="secondary">Compare A and B</button>{% endif %}
+</form>
+<p>{% if page > 1 %}<a href="{{ path('console_lists', {list: list.value, page: page - 1}) }}">Newer</a>{% endif %}
+   {% if history|length == 50 %}<a href="{{ path('console_lists', {list: list.value, page: page + 1}) }}">Older</a>{% endif %}</p>
+{% endblock %}

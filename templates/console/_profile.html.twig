@@ -1,0 +1,30 @@
+{% macro tree(data) %}
+    {% import _self as self %}
+    <dl class="tree">
+    {% for key, value in data %}
+        <dt>{{ key }}</dt>
+        <dd>
+            {% if value is iterable and value is not empty and (value|keys|first) is not same as(0) %}
+                {{ self.tree(value) }}
+            {% elseif value is iterable %}
+                {% if value is empty %}<span class="muted">none</span>{% else %}<ul>{% for item in value %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+            {% elseif value is same as(true) %}yes
+            {% elseif value is same as(false) %}no
+            {% elseif value is null %}<span class="muted">—</span>
+            {% elseif value starts with 'https://' %}<a href="{{ value }}" rel="noopener noreferrer nofollow">{{ value }}</a>
+            {% else %}{{ value }}{% endif %}
+        </dd>
+    {% endfor %}
+    </dl>
+{% endmacro %}
+
+{% macro diff(rows) %}
+    <table class="diff">
+        <thead><tr><th>Field</th><th>Before</th><th>After</th></tr></thead>
+        <tbody>
+        {% for row in rows %}
+            <tr><td class="mono">{{ row.path }}</td><td class="old">{{ row.old ?? '—' }}</td><td class="new">{{ row.new ?? '—' }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+{% endmacro %}

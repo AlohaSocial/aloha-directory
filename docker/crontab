@@ -1,0 +1,5 @@
+# Aloha Directory cron jobs (concept 13.1, 13.2). Run by crond in the "cron" container as www-data.
+* * * * *        php /app/bin/console app:tick --no-interaction
+7 * * * *        php /app/bin/console app:check --no-interaction
+30 3 * * *       php /app/bin/console app:maintenance --no-interaction
+0 6 1 1,4,7,10 * php /app/bin/console app:transparency:report --no-interaction

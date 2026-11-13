@@ -1,0 +1,4 @@
+# Session-bound CSRF tokens for every form of the curator console and the report form.
+framework:
+    csrf_protection:
+        enabled: true

@@ -1,0 +1,26 @@
+# Local configuration and secrets — never commit these.
+/config.php
+/keys/
+*.key
+
+# Generated output (lists, media, static website) when output_dir is public/.
+/public/lists/
+/public/media/
+/public/servers/
+/public/index.html
+/public/covenant/
+/public/criteria/
+/public/privacy/
+/public/transparency/
+/public/keys/
+
+###> symfony/framework-bundle ###
+/public/bundles/
+/var/
+/vendor/
+###< symfony/framework-bundle ###
+
+###> phpunit/phpunit ###
+/phpunit.xml
+/.phpunit.cache/
+###< phpunit/phpunit ###

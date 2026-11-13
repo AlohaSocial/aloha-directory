@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>{% block title %}Curator console{% endblock %} · Aloha Directory</title>
+    <link rel="stylesheet" href="/assets/console.css">
+    <script src="/assets/passkey.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+    <a class="brand" href="{{ path('console_queue') }}">Aloha Directory <span>curators</span></a>
+    {% if app.user %}
+        <nav aria-label="Console">
+            <a href="{{ path('console_queue') }}">Queue</a>
+            <a href="{{ path('console_servers') }}">Servers</a>
+            <a href="{{ path('console_providers') }}">Search providers</a>
+            <a href="{{ path('console_complaints') }}">Complaints</a>
+            <a href="{{ path('console_lists') }}">List builds</a>
+            <a href="{{ path('console_fairness') }}">Fairness</a>
+            <a href="{{ path('console_blocklist') }}">Block list</a>
+            <a href="{{ path('console_audit') }}">Audit log</a>
+            {% if is_granted('ROLE_ADMIN') %}<a href="{{ path('console_curators') }}">Curators</a>{% endif %}
+            <a href="{{ path('console_account') }}">Account</a>
+        </nav>
+        <form method="post" action="{{ path('console_logout') }}" class="logout">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token('logout') }}">
+            <button type="submit" class="link">Sign out {{ app.user.displayName }}</button>
+        </form>
+    {% endif %}
+</header>
+<main id="main">
+    {% for type, messages in app.flashes %}
+        {% for message in messages %}
+            <p class="flash flash-{{ type }}" role="{{ type == 'error' ? 'alert' : 'status' }}">{{ message }}</p>
+        {% endfor %}
+    {% endfor %}
+    {% block content %}{% endblock %}
+</main>
+</body>
+</html>
