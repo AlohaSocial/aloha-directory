@@ -11,19 +11,14 @@ use App\Crypto\Ed25519;
 use App\Entity\Comment;
 use App\Entity\Heartbeat;
 use App\Entity\PendingEnrolment;
-use App\Entity\Proposal;
 use App\Entity\Server;
 use App\Entity\ServerCheck;
-use App\Entity\TransparencyEntry;
 use App\Enum\CommentVisibility;
 use App\Enum\PauseKind;
-use App\Enum\ProposalAction;
-use App\Enum\ProposalStatus;
 use App\Enum\ServerState;
 use App\Net\DomainName;
 use App\Net\FetchException;
 use App\Net\SafeHttpClient;
-use App\Repository\ProposalRepository;
 use App\Repository\ServerRepository;
 use App\Validation\ProfileValidator;
 use Doctrine\DBAL\LockMode;
@@ -46,7 +41,6 @@ final class ServerLifecycle
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly ServerRepository $servers,
-        private readonly ProposalRepository $proposals,
         private readonly SafeHttpClient $http,
         private readonly NodeinfoReader $nodeinfo,
         private readonly Blocklist $blocklist,
@@ -393,26 +387,12 @@ final class ServerLifecycle
         }
         $now = $this->clock->now();
 
-        // Withdrawing cannot be used to escape a delisting: an open delisting proposal is then
-        // recorded publicly and the re-application wait applies, as for a delisting.
-        foreach ($this->proposals->findOpen($server) as $proposal) {
-            if (ProposalAction::Delist === $proposal->action) {
-                $reason = (string) ($proposal->params['public_reason'] ?? 'A delisting was pending.').' (The server withdrew while the delisting was pending.)';
-                $this->markDelisted($server, $reason);
-                $this->em->persist(new TransparencyEntry($server->domain, 'withdrawn_during_delisting', (string) ($proposal->params['rule'] ?? 'listing_criteria'), $reason, $now));
-                $this->audit->server($server, 'server.withdrawn_during_delisting', ['proposal' => $proposal->id]);
-
-                return;
-            }
-        }
-
         $server->state = ServerState::Withdrawn;
         $server->withdrawnAt = $now;
         $server->featured = false;
         $server->searchProvider = false;
         $server->pauseKind = null;
         $server->updatedAt = $now;
-        $this->closeOpenProposals($server, 'The server withdrew from the directory.');
         $this->audit->server($server, 'server.withdrawn');
     }
 
@@ -570,7 +550,7 @@ final class ServerLifecycle
         $server->pauseKind = null;
         $server->pausedAt = null;
         $server->pauseReason = null;
-        // The published profile is the one both curators confirmed (CurationService checks its
+        // The published profile is the one the deciding curator reviewed (CurationService checks its
         // fingerprint). Pending changes to reviewed groups are never approved implicitly: they keep
         // waiting for approveProfileChanges().
         $server->approvedProfile = $server->profile;
@@ -587,7 +567,6 @@ final class ServerLifecycle
         $server->searchProvider = false;
         $server->pauseKind = null;
         $server->updatedAt = $now;
-        $this->closeOpenProposals($server, 'The server was delisted.');
     }
 
     public function markRejected(Server $server, string $reason): void
@@ -597,7 +576,6 @@ final class ServerLifecycle
         $server->rejectedAt = $now;
         $server->decisionReason = $reason;
         $server->updatedAt = $now;
-        $this->closeOpenProposals($server, 'The application was rejected.');
     }
 
     public function markWaitlisted(Server $server): void
@@ -626,17 +604,6 @@ final class ServerLifecycle
         $server->approvedProfile = null;
         $server->pendingProfile = null;
         $server->profileRequested = null === $server->profile;
-    }
-
-    private function closeOpenProposals(Server $server, string $note): void
-    {
-        $now = $this->clock->now();
-        foreach ($this->proposals->findOpen($server) as $proposal) {
-            /** @var Proposal $proposal */
-            $proposal->status = ProposalStatus::Obsolete;
-            $proposal->decidedAt = $now;
-            $proposal->decisionNote = $note;
-        }
     }
 
     private function assertActive(Server $server): void

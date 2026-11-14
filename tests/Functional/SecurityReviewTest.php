@@ -11,8 +11,8 @@ use App\Entity\CuratorConflict;
 use App\Entity\PendingEnrolment;
 use App\Entity\Review;
 use App\Entity\TransparencyEntry;
+use App\Enum\Decision;
 use App\Enum\PauseKind;
-use App\Enum\ProposalAction;
 use App\Enum\ServerState;
 use App\Lists\KeySetService;
 use App\Security\CuratorAccounts;
@@ -67,12 +67,11 @@ final class SecurityReviewTest extends FunctionalTestCase
         self::assertSame('rate_limited', $this->api('POST', '/api/v1/servers/slow.example.org/verify', null, $fake, 429)['error']);
     }
 
-    public function testListingIsConfirmedOnlyForTheReviewedProfile(): void
+    public function testListingNeedsAReviewOfTheCurrentProfile(): void
     {
         $fake = $this->enrolServer('social.example.org');
         $server = $this->bringToReview($fake);
         $alice = $this->createCurator('alice@nextcloud.test', true);
-        $bob = $this->createCurator('bob@nextcloud.test');
         $curation = static::getContainer()->get(CurationService::class);
         $checklist = array_fill_keys(array_keys(\App\Curation\Covenant::INITIAL_CHECKLIST), true);
 
@@ -82,11 +81,9 @@ final class SecurityReviewTest extends FunctionalTestCase
             self::fail('A review for a profile the curator did not see must be refused.');
         } catch (CurationException) {
         }
-
         $curation->recordReview($alice, $server, Review::KIND_INITIAL, $checklist, 'Fine.', $server->profileFingerprint());
-        $proposal = $curation->propose($alice, $server, ProposalAction::List, [], 'Good server.');
 
-        // The server swaps its operator after the review and the proposal.
+        // The server swaps its operator after the review.
         $profile = Fixtures::profile('social.example.org');
         $profile['operator']['name'] = 'Someone Else Ltd';
         $profile['etag'] = 'W/"8"';
@@ -94,25 +91,21 @@ final class SecurityReviewTest extends FunctionalTestCase
         $this->api('PUT', '/api/v1/servers/social.example.org/profile', $profile, $fake);
 
         // Fresh objects, as in the curator's next request (the test client resets the entity manager).
-        $proposal = $this->em->find(\App\Entity\Proposal::class, $proposal->id);
-        self::assertNotNull($proposal);
-        $bob = $this->curator('bob@nextcloud.test');
-        $alice = $this->curator('alice@nextcloud.test');
         try {
-            $curation->confirm($bob, $proposal);
-            self::fail('Confirming a listing for a changed profile must fail.');
+            $curation->decide($this->curator('alice@nextcloud.test'), $this->server('social.example.org'), Decision::List, [], 'Good server.');
+            self::fail('Listing a profile that changed after the review must fail.');
         } catch (CurationException $e) {
             self::assertStringContainsString('changed', $e->getMessage());
         }
         self::assertSame(ServerState::InReview, $this->server('social.example.org')->state);
 
-        // A new review of the new profile is needed before proposing again.
-        $curation->decline($bob, $proposal, 'Profile changed.');
-        try {
-            $curation->propose($alice, $this->server('social.example.org'), ProposalAction::List, [], 'Again.');
-            self::fail('The old review must not cover the new profile.');
-        } catch (CurationException) {
-        }
+        // A review of the new profile allows the listing.
+        $server = $this->server('social.example.org');
+        $curation->recordReview($this->curator('alice@nextcloud.test'), $server, Review::KIND_INITIAL, $checklist, 'New operator checked.', $server->profileFingerprint());
+        $curation->decide($this->curator('alice@nextcloud.test'), $this->server('social.example.org'), Decision::List, [], 'Good server.');
+        $server = $this->server('social.example.org');
+        self::assertSame(ServerState::Listed, $server->state);
+        self::assertSame('Someone Else Ltd', $server->approvedProfile['operator']['name']);
     }
 
     public function testResumingAPausedServerDoesNotApproveWaitingChanges(): void
@@ -128,8 +121,7 @@ final class SecurityReviewTest extends FunctionalTestCase
         $this->clock->sleep(1);
         self::assertTrue($this->api('PUT', '/api/v1/servers/social.example.org/profile', $profile, $fake)['pending_review']);
 
-        $proposal = $curation->propose($this->curator('alice@nextcloud.test'), $this->server('social.example.org'), ProposalAction::List, [], 'Report resolved.');
-        $curation->confirm($this->curator('bob@nextcloud.test'), $proposal);
+        $curation->decide($this->curator('bob@nextcloud.test'), $this->server('social.example.org'), Decision::List, [], 'Report resolved.');
 
         $server = $this->server('social.example.org');
         self::assertSame(ServerState::Listed, $server->state);
@@ -138,18 +130,19 @@ final class SecurityReviewTest extends FunctionalTestCase
         self::assertSame('https://social.example.org/phishing', $server->pendingProfile['terms']['terms_url'], 'the change still waits for a curator');
     }
 
-    public function testWithdrawingDuringADelistingCountsAsDelisting(): void
+    public function testADelistingCannotBeEscapedByWithdrawing(): void
     {
         $fake = $this->enrolServer('social.example.org');
         $this->listServer($fake);
         $curation = static::getContainer()->get(CurationService::class);
-        $curation->propose($this->curator('alice@nextcloud.test'), $this->server('social.example.org'), ProposalAction::Delist, ['rule' => 'active_moderation', 'public_reason' => 'Reports went unanswered.'], 'Complaint #1.');
-
-        $this->clock->sleep(1);
-        $this->api('DELETE', '/api/v1/servers/social.example.org', null, $fake);
+        // The decision takes effect at once, so there is no window in which the server could withdraw.
+        $curation->decide($this->curator('alice@nextcloud.test'), $this->server('social.example.org'), Decision::Delist, ['rule' => 'active_moderation', 'public_reason' => 'Reports went unanswered.'], 'Complaint #1.');
         self::assertSame(ServerState::Delisted, $this->server('social.example.org')->state);
         self::assertCount(1, $this->em->getRepository(TransparencyEntry::class)->findBy(['serverDomain' => 'social.example.org']));
 
+        $this->clock->sleep(1);
+        self::assertSame('not_active', $this->api('DELETE', '/api/v1/servers/social.example.org', null, $fake, 409)['error']);
+        self::assertSame(ServerState::Delisted, $this->server('social.example.org')->state);
         $this->clock->sleep(86400);
         $this->api('POST', '/api/v1/servers/enrol', ['domain' => 'social.example.org', 'public_key' => $fake->publicKey()], null, 403);
     }

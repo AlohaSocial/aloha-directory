@@ -12,7 +12,7 @@ use Psr\Clock\ClockInterface;
 /**
  * Builds the entries of search.json (concept 10, Appendix A.3, 15.3).
  *
- * A provider appears only while it is listed, accepted as a provider by two curators, has a fresh
+ * A provider appears only while it is listed, accepted as a provider by a curator, has a fresh
  * heartbeat, and actually has the capabilities switched on that its profile offers.
  */
 final class SearchListEntryFactory

@@ -7,12 +7,12 @@ namespace App\Tests\Functional;
 use App\Curation\CurationException;
 use App\Curation\CurationService;
 use App\Entity\Curator;
-use App\Enum\ProposalAction;
+use App\Enum\Decision;
 use App\Enum\ServerState;
 use App\Tests\Support\FunctionalTestCase;
 
 /**
- * The whole path of concept 6–8: enrol, verify, profile, heartbeats, checks, two-curator listing,
+ * The whole path of concept 6–8: enrol, verify, profile, heartbeats, checks, a curator's listing,
  * signed publication, capacity buckets, pause, search providers and withdrawal.
  */
 final class ListingLifecycleTest extends FunctionalTestCase
@@ -87,7 +87,7 @@ final class ListingLifecycleTest extends FunctionalTestCase
         $this->heartbeat($fake, expected: 409);
     }
 
-    public function testTwoCuratorRuleAndConflicts(): void
+    public function testOneCuratorDecidesAndConflictsExclude(): void
     {
         $fake = $this->enrolServer('two.example.org');
         $server = $this->bringToReview($fake);
@@ -96,40 +96,43 @@ final class ListingLifecycleTest extends FunctionalTestCase
         $carol = $this->createCurator('carol@nextcloud.test');
         $curation = static::getContainer()->get(CurationService::class);
 
-        // A proposal to list needs a completed checklist first.
+        // Listing needs the deciding curator's own completed checklist.
         try {
-            $curation->propose($alice, $server, ProposalAction::List, [], 'Good server.');
+            $curation->decide($alice, $server, Decision::List, [], 'Good server.');
             self::fail('Listing without a review must be refused.');
-        } catch (CurationException) {
+        } catch (CurationException $e) {
+            self::assertStringContainsString('review checklist', $e->getMessage());
         }
         $curation->recordReview($alice, $server, 'initial', array_fill_keys(['operator', 'moderation', 'legal', 'experience', 'mix'], true), 'Fine.');
-        $proposal = $curation->propose($alice, $server, ProposalAction::List, [], 'Good server.');
-
-        // The proposer cannot confirm.
         try {
-            $curation->confirm($alice, $proposal);
-            self::fail('Self-confirmation must be refused.');
+            $curation->decide($bob, $server, Decision::List, [], 'Alice reviewed it.');
+            self::fail('Someone else\'s review must not count.');
         } catch (CurationException $e) {
-            self::assertStringContainsString('second curator', $e->getMessage());
+            self::assertStringContainsString('review checklist', $e->getMessage());
         }
+        self::assertSame(ServerState::InReview, $this->server('two.example.org')->state);
 
-        // A curator with a conflict of interest cannot confirm.
+        // A curator with a conflict of interest cannot decide, even after a review.
         $curation->declareConflict($carol, $carol, $server, 'I run this server.');
         try {
-            $curation->confirm($carol, $proposal);
-            self::fail('A conflicted curator must not confirm.');
+            $curation->decide($carol, $server, Decision::List, [], 'My own server.');
+            self::fail('A conflicted curator must not decide.');
         } catch (CurationException $e) {
             self::assertStringContainsString('conflict', $e->getMessage());
         }
 
-        $curation->confirm($bob, $proposal);
+        // One curator who reviewed the server is enough, and the decision takes effect at once.
+        $curation->decide($alice, $server, Decision::List, [], 'Good server.');
         $server = $this->server('two.example.org');
         self::assertSame(ServerState::Listed, $server->state);
+        $audit = $this->em->getRepository(\App\Entity\AuditLogEntry::class)->findOneBy(['action' => 'server.listed']);
+        self::assertNotNull($audit);
+        self::assertSame('alice@nextcloud.test', $audit->actorLabel);
+        self::assertSame('Good server.', $audit->details['reason']);
 
         // Featuring needs 90 days of listing.
-        $proposal = $curation->propose($this->curator('alice@nextcloud.test'), $server, ProposalAction::Feature, [], 'Strong German server.');
         try {
-            $curation->confirm($this->curator('bob@nextcloud.test'), $proposal);
+            $curation->decide($this->curator('bob@nextcloud.test'), $server, Decision::Feature, [], 'Strong German server.');
             self::fail('Featuring a new server must be refused.');
         } catch (CurationException $e) {
             self::assertStringContainsString('90 days', $e->getMessage());
@@ -137,15 +140,14 @@ final class ListingLifecycleTest extends FunctionalTestCase
 
         // Weight changes are bounded.
         try {
-            $curation->propose($this->curator('alice@nextcloud.test'), $this->server('two.example.org'), ProposalAction::Weight, ['weight' => '3'], 'Boost.');
+            $curation->decide($this->curator('alice@nextcloud.test'), $this->server('two.example.org'), Decision::Weight, ['weight' => '3'], 'Boost.');
             self::fail('Out-of-range weight must be refused.');
         } catch (CurationException) {
         }
 
         // Delisting creates a public transparency entry and blocks re-application for six months.
         $server = $this->server('two.example.org');
-        $proposal = $curation->propose($this->curator('alice@nextcloud.test'), $server, ProposalAction::Delist, ['rule' => 'active_moderation', 'public_reason' => 'Reports went unanswered for weeks.'], 'See complaint #1.');
-        $curation->confirm($this->curator('bob@nextcloud.test'), $proposal);
+        $curation->decide($this->curator('bob@nextcloud.test'), $server, Decision::Delist, ['rule' => 'active_moderation', 'public_reason' => 'Reports went unanswered for weeks.'], 'See complaint #1.');
         self::assertSame(ServerState::Delisted, $this->server('two.example.org')->state);
         self::assertCount(1, $this->em->getRepository(\App\Entity\TransparencyEntry::class)->findAll());
 
@@ -159,8 +161,7 @@ final class ListingLifecycleTest extends FunctionalTestCase
         $fake = $this->enrolServer('search.example.net');
         $server = $this->listServer($fake);
         $curation = static::getContainer()->get(CurationService::class);
-        $proposal = $curation->propose($this->curator('alice@nextcloud.test'), $server, ProposalAction::EnableSearch, [], 'Good index policy.');
-        $curation->confirm($this->curator('bob@nextcloud.test'), $proposal);
+        $curation->decide($this->curator('bob@nextcloud.test'), $server, Decision::EnableSearch, [], 'Good index policy.');
 
         $this->tick();
         $entries = $this->publishedList('search')['entries'];

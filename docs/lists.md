@@ -103,7 +103,7 @@ No data about the person leaves the device.
 }
 ```
 
-- **Which providers appear.** A provider is included only while it is listed, two curators have accepted it as a provider, its heartbeat is fresh, and its heartbeat confirms each capability.
+- **Which providers appear.** A provider is included only while it is listed, a curator has accepted it as a provider, its heartbeat is fresh, and its heartbeat confirms each capability.
 - **Weight.** Its `weight` already includes the load hint.
 - **How servers use the list.** Servers use up to 4 providers, preferring shared languages and then rotating at random. They respect `429` and `Retry-After`, and query the AppView without authentication (concept 10.3, 15.3).
 - **Unknown kinds.** Ignore any `kind` you do not know.

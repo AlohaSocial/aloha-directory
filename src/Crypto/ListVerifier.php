@@ -44,8 +44,16 @@ final class ListVerifier
             if ('Ed25519' !== ($key['alg'] ?? null) || 'active' !== ($key['status'] ?? null)) {
                 continue;
             }
-            if (isset($key['not_after']) && (!\is_string($key['not_after']) || new \DateTimeImmutable($key['not_after']) < $now)) {
-                continue;
+            // Trust a key only while its not_after, if present, is provably in the future.
+            if (isset($key['not_after'])) {
+                try {
+                    $notAfter = \is_string($key['not_after']) ? new \DateTimeImmutable($key['not_after']) : null;
+                } catch (\Exception) {
+                    $notAfter = null;
+                }
+                if (null === $notAfter || $notAfter < $now) {
+                    continue;
+                }
             }
             try {
                 $listKeys[$key['kid']] = Ed25519::decodePublicKey($key['public_key']);

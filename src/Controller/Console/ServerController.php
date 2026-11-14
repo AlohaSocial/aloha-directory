@@ -12,19 +12,17 @@ use App\Curation\CurationService;
 use App\Curation\FeaturedEligibility;
 use App\Entity\Comment;
 use App\Entity\CuratorConflict;
-use App\Entity\Proposal;
 use App\Entity\Review;
 use App\Entity\Server;
 use App\Entity\ServerCheck;
 use App\Enum\CommentVisibility;
-use App\Enum\ProposalAction;
+use App\Enum\Decision;
 use App\Enum\ServerState;
 use App\Lists\ServerListEntryFactory;
 use App\Net\DomainName;
 use App\Repository\AuditLogRepository;
 use App\Repository\ComplaintRepository;
 use App\Repository\HeartbeatRepository;
-use App\Repository\ProposalRepository;
 use App\Repository\ServerRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -68,7 +66,6 @@ final class ServerController extends AbstractConsoleController
     public function show(
         string $domain,
         HeartbeatRepository $heartbeats,
-        ProposalRepository $proposals,
         ComplaintRepository $complaints,
         AuditLogRepository $audit,
         FeaturedEligibility $featured,
@@ -91,7 +88,6 @@ final class ServerController extends AbstractConsoleController
             'heartbeats' => $heartbeats->latestForServer($server, 48),
             'availability' => $featured->availabilityPercent($server),
             'featured_unmet' => ServerState::Listed === $server->state && !$server->featured ? $featured->unmet($server) : [],
-            'proposals' => $proposals->findForServer($server),
             'comments' => $this->em->getRepository(Comment::class)->findBy(['server' => $server, 'complaint' => null], ['createdAt' => 'DESC'], 100),
             'reviews' => $this->em->getRepository(Review::class)->findBy(['server' => $server], ['createdAt' => 'DESC'], 20),
             'complaints' => $complaints->findBy(['server' => $server], ['createdAt' => 'DESC'], 50),
@@ -99,20 +95,20 @@ final class ServerController extends AbstractConsoleController
             'profile_diff' => Diff::fields($server->approvedProfile, $server->profile),
             'pending_diff' => null === $server->pendingProfile ? [] : Diff::fields($server->profile, $server->pendingProfile),
             'entry' => ServerState::Listed === $server->state && null !== $server->profile ? $entries->entry($server) : null,
-            'actions' => ProposalAction::cases(),
+            'decisions' => Decision::cases(),
             'initial_checklist' => Covenant::INITIAL_CHECKLIST,
             'rereview_checklist' => Covenant::REREVIEW_CHECKLIST,
             'delisting_reasons' => Covenant::delistingReasons(),
         ]);
     }
 
-    #[Route('/{domain}/propose', name: 'console_server_propose', requirements: ['domain' => self::DOMAIN], methods: ['POST'])]
-    public function propose(Request $request, string $domain): RedirectResponse
+    #[Route('/{domain}/decide', name: 'console_server_decide', requirements: ['domain' => self::DOMAIN], methods: ['POST'])]
+    public function decide(Request $request, string $domain): RedirectResponse
     {
         $this->requireCsrf($request);
         $server = $this->server($domain);
-        $action = ProposalAction::tryFrom((string) $request->request->get('action'));
-        if (null === $action) {
+        $decision = Decision::tryFrom((string) $request->request->get('decision'));
+        if (null === $decision) {
             throw new NotFoundHttpException();
         }
         $params = [
@@ -122,28 +118,10 @@ final class ServerController extends AbstractConsoleController
         ];
 
         return $this->act(
-            fn () => $this->curation->propose($this->curator(), $server, $action, $params, $this->text($request, 'reason', 2000)),
-            \sprintf('Proposal "%s" created. A second curator has to confirm it.', $action->label()),
+            fn () => $this->curation->decide($this->curator(), $server, $decision, $params, $this->text($request, 'reason', 2000)),
+            \sprintf('Done: "%s". The published list updates within a minute.', $decision->label()),
             $this->url($server),
         );
-    }
-
-    #[Route('/{domain}/proposals/{id}/confirm', name: 'console_proposal_confirm', requirements: ['domain' => self::DOMAIN, 'id' => '\d+'], methods: ['POST'])]
-    public function confirm(Request $request, string $domain, int $id): RedirectResponse
-    {
-        $this->requireCsrf($request);
-        $proposal = $this->proposal($domain, $id);
-
-        return $this->act(fn () => $this->curation->confirm($this->curator(), $proposal, $this->text($request, 'note', 2000)), 'Confirmed. The published list updates within a minute.', $this->url($proposal->server));
-    }
-
-    #[Route('/{domain}/proposals/{id}/decline', name: 'console_proposal_decline', requirements: ['domain' => self::DOMAIN, 'id' => '\d+'], methods: ['POST'])]
-    public function decline(Request $request, string $domain, int $id): RedirectResponse
-    {
-        $this->requireCsrf($request);
-        $proposal = $this->proposal($domain, $id);
-
-        return $this->act(fn () => $this->curation->decline($this->curator(), $proposal, $this->text($request, 'note', 2000)), 'The proposal is closed.', $this->url($proposal->server));
     }
 
     #[Route('/{domain}/pause', name: 'console_server_pause', requirements: ['domain' => self::DOMAIN], methods: ['POST'])]
@@ -237,16 +215,6 @@ final class ServerController extends AbstractConsoleController
         }
 
         return $server;
-    }
-
-    private function proposal(string $domain, int $id): Proposal
-    {
-        $proposal = $this->em->find(Proposal::class, $id);
-        if (null === $proposal || $proposal->server->domain !== $domain) {
-            throw new NotFoundHttpException();
-        }
-
-        return $proposal;
     }
 
     private function url(Server $server): string

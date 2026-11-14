@@ -55,7 +55,7 @@ final class SignKeySetCommand
         $json = KeySetService::sign($keys, $serial, $rootKid, $secret, new \DateTimeImmutable(), $validityDays);
         sodium_memzero($secret);
 
-        if (false === file_put_contents($out, $json, \LOCK_EX)) {
+        if (false === @file_put_contents($out, $json, \LOCK_EX)) {
             $io->error('Cannot write '.$out);
 
             return Command::FAILURE;

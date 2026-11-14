@@ -8,17 +8,14 @@ use App\Entity\Comment;
 use App\Entity\Complaint;
 use App\Entity\Curator;
 use App\Entity\CuratorConflict;
-use App\Entity\Proposal;
 use App\Entity\Review;
 use App\Entity\Server;
 use App\Entity\TransparencyEntry;
 use App\Enum\CommentVisibility;
 use App\Enum\ComplaintStatus;
+use App\Enum\Decision;
 use App\Enum\PauseKind;
-use App\Enum\ProposalAction;
-use App\Enum\ProposalStatus;
 use App\Enum\ServerState;
-use App\Repository\ProposalRepository;
 use App\Service\AuditLogger;
 use App\Service\DirectorySettings;
 use App\Service\Notifier;
@@ -31,10 +28,10 @@ use Psr\Clock\ClockInterface;
 /**
  * Curator decisions (concept 7, 12.4, 13.4).
  *
- *  - Listing, featuring, delisting, weight changes, rejections and search-provider status need two
- *    curators: one proposes with a reason, a different one confirms.
- *  - A curator with a declared conflict of interest can neither propose nor confirm for that server.
- *  - A pause needs one curator and takes effect at once.
+ *  - One curator decides: listing, featuring, delisting, weight changes, rejections, search-provider
+ *    status and pauses take effect at once, with the reason in the audit log.
+ *  - Listing an application needs that curator's complete review of the current profile.
+ *  - A curator with a declared conflict of interest cannot decide anything about that server.
  *
  * Every method flushes, so each action and its audit entry are one transaction.
  */
@@ -44,7 +41,6 @@ final class CurationService
 
     public function __construct(
         private readonly EntityManagerInterface $em,
-        private readonly ProposalRepository $proposals,
         private readonly ServerLifecycle $lifecycle,
         private readonly FeaturedEligibility $featured,
         private readonly AuditLogger $audit,
@@ -54,91 +50,33 @@ final class CurationService
     ) {
     }
 
-    // --- Two-curator decisions --------------------------------------------------------------
+    // --- Decisions ---------------------------------------------------------------------------
 
     /**
-     * @param array<string, mixed> $params
+     * Makes a decision about a server. It takes effect at once; the published lists follow within
+     * a minute.
+     *
+     * @param array<string, mixed> $params weight, rule, public_reason (depending on the decision)
      */
-    public function propose(Curator $curator, Server $server, ProposalAction $action, array $params, string $reason): Proposal
+    public function decide(Curator $curator, Server $server, Decision $decision, array $params, string $reason): void
     {
         $this->assertNoConflict($curator, $server);
         $reason = $this->requireText($reason, 'reason', 2000);
-        $params = $this->validateParams($action, $params);
-        $this->assertApplicable($server, $action, $params);
-
-        $application = ProposalAction::List === $action && self::isApplication($server);
-        if ($application) {
+        $params = $this->validateParams($decision, $params);
+        $this->assertApplicable($server, $decision, $params);
+        if (Decision::List === $decision && self::isApplication($server)) {
+            // The curator's own complete review of exactly the current profile.
             $this->assertRecentReview($server, $curator, Review::KIND_INITIAL);
         }
-        foreach ($this->proposals->findOpen($server) as $open) {
-            if ($open->action === $action) {
-                throw new CurationException('There is already an open proposal for this action. Confirm or decline it first.');
-            }
-        }
-
-        $proposal = new Proposal($server, $action, $params, $reason, $curator, $this->clock->now());
-        if ($application) {
-            $proposal->profileFingerprint = $server->profileFingerprint();
-        }
-        $this->em->persist($proposal);
-        $this->audit->curator($curator, 'proposal.created', $server, ['action' => $action->value, 'params' => $params, 'reason' => $reason]);
-        $this->em->flush();
-
-        return $proposal;
-    }
-
-    public function confirm(Curator $curator, Proposal $proposal, string $note = ''): void
-    {
-        if (ProposalStatus::Open !== $proposal->status) {
-            throw new CurationException('This proposal is no longer open.');
-        }
-        if (null !== $proposal->proposedBy && $proposal->proposedBy->id === $curator->id) {
-            throw new CurationException('A second curator must confirm. You cannot confirm your own proposal.');
-        }
-        $server = $proposal->server;
-        $this->assertNoConflict($curator, $server);
-        $this->assertApplicable($server, $proposal->action, $proposal->params);
-        if (ProposalAction::List === $proposal->action && self::isApplication($server)
-            && $proposal->profileFingerprint !== $server->profileFingerprint()) {
-            throw new CurationException('The server changed its terms, jurisdiction, operator or moderation details after this proposal was made. Decline it; the proposer has to review the server again.');
-        }
-        if (ProposalAction::Feature === $proposal->action && [] !== ($unmet = $this->featured->unmet($server))) {
+        if (Decision::Feature === $decision && [] !== ($unmet = $this->featured->unmet($server))) {
             throw new CurationException('The server cannot be featured yet: '.implode(' ', $unmet));
         }
 
-        $this->execute($curator, $proposal);
-
-        $proposal->status = ProposalStatus::Confirmed;
-        $proposal->decidedBy = $curator;
-        $proposal->decidedAt = $this->clock->now();
-        $proposal->decisionNote = '' === trim($note) ? null : mb_substr(trim($note), 0, 2000);
-        $this->audit->curator($curator, 'proposal.confirmed', $server, [
-            'proposal' => $proposal->id,
-            'action' => $proposal->action->value,
-            'params' => $proposal->params,
-            'proposed_by' => $proposal->proposedBy?->email,
-        ]);
+        $this->execute($curator, $server, $decision, $params, $reason);
         $this->em->flush();
     }
 
-    public function decline(Curator $curator, Proposal $proposal, string $note): void
-    {
-        if (ProposalStatus::Open !== $proposal->status) {
-            throw new CurationException('This proposal is no longer open.');
-        }
-        $own = null !== $proposal->proposedBy && $proposal->proposedBy->id === $curator->id;
-        if (!$own) {
-            $this->assertNoConflict($curator, $proposal->server);
-        }
-        $proposal->status = $own ? ProposalStatus::Withdrawn : ProposalStatus::Declined;
-        $proposal->decidedBy = $curator;
-        $proposal->decidedAt = $this->clock->now();
-        $proposal->decisionNote = mb_substr(trim($note), 0, 2000) ?: null;
-        $this->audit->curator($curator, $own ? 'proposal.withdrawn' : 'proposal.declined', $proposal->server, ['proposal' => $proposal->id, 'action' => $proposal->action->value, 'note' => $note]);
-        $this->em->flush();
-    }
-
-    // --- Single-curator actions -------------------------------------------------------------
+    // --- Pauses, waiting list and notes --------------------------------------------------------
 
     /**
      * Immediate pause during an investigation (concept 7.5). The admin gets the concern at once.
@@ -173,6 +111,7 @@ final class CurationService
 
     public function comment(Curator $curator, Server $server, string $body, CommentVisibility $visibility): void
     {
+        $this->assertNoConflict($curator, $server);
         $body = $this->requireText($body, 'comment', 5000, true);
         $this->em->persist(new Comment($server, $curator, false, $visibility, $body, $this->clock->now()));
         $this->audit->curator($curator, CommentVisibility::Admin === $visibility ? 'server.question_sent' : 'server.note_added', $server);
@@ -303,6 +242,7 @@ final class CurationService
 
     public function shareComplaint(Curator $curator, Complaint $complaint): void
     {
+        $this->assertNoConflict($curator, $complaint->server);
         if (ComplaintStatus::Open !== $complaint->status) {
             throw new CurationException('Only open complaints can be shared.');
         }
@@ -315,6 +255,7 @@ final class CurationService
 
     public function replyToComplaint(Curator $curator, Complaint $complaint, string $body): void
     {
+        $this->assertNoConflict($curator, $complaint->server);
         if (null === $complaint->sharedAt) {
             throw new CurationException('Share the complaint with the admin first.');
         }
@@ -326,6 +267,7 @@ final class CurationService
 
     public function closeComplaint(Curator $curator, Complaint $complaint, bool $dismiss, string $resolution): void
     {
+        $this->assertNoConflict($curator, $complaint->server);
         if (!$complaint->status->isOpen()) {
             throw new CurationException('This complaint is already closed.');
         }
@@ -372,53 +314,54 @@ final class CurationService
 
     // --- Internals -------------------------------------------------------------------------
 
-    private function execute(Curator $curator, Proposal $proposal): void
+    /**
+     * @param array<string, mixed> $params
+     */
+    private function execute(Curator $curator, Server $server, Decision $decision, array $params, string $reason): void
     {
-        $server = $proposal->server;
-        $params = $proposal->params;
         $now = $this->clock->now();
 
-        switch ($proposal->action) {
-            case ProposalAction::List:
+        switch ($decision) {
+            case Decision::List:
                 $wasPaused = ServerState::Paused === $server->state;
                 $this->lifecycle->markListed($server);
-                $this->audit->curator($curator, $wasPaused ? 'server.resumed' : 'server.listed', $server, ['reason' => $proposal->reason]);
+                $this->audit->curator($curator, $wasPaused ? 'server.resumed' : 'server.listed', $server, ['reason' => $reason]);
                 $this->notifier->serverAdmin($server, $wasPaused ? 'Your listing is active again' : 'Your server is listed',
                     $wasPaused ? "{$server->domain} is listed in the Aloha Directory again." : "Welcome! {$server->domain} is now listed in the Aloha Directory. New people can find it in the Aloha apps within a few minutes.");
                 break;
-            case ProposalAction::Feature:
+            case Decision::Feature:
                 $server->featured = true;
                 $server->featuredAt = $now;
-                $this->audit->curator($curator, 'server.featured', $server);
+                $this->audit->curator($curator, 'server.featured', $server, ['reason' => $reason]);
                 break;
-            case ProposalAction::Unfeature:
+            case Decision::Unfeature:
                 $server->featured = false;
                 $server->featuredAt = null;
-                $this->audit->curator($curator, 'server.unfeatured', $server, ['reason' => $proposal->reason]);
+                $this->audit->curator($curator, 'server.unfeatured', $server, ['reason' => $reason]);
                 break;
-            case ProposalAction::Weight:
+            case Decision::Weight:
                 $old = $server->weightPercent;
                 $server->weightPercent = (int) $params['weight_percent'];
-                $this->audit->curator($curator, 'server.weight_changed', $server, ['from' => $old / 100, 'to' => $server->weight()]);
+                $this->audit->curator($curator, 'server.weight_changed', $server, ['from' => $old / 100, 'to' => $server->weight(), 'reason' => $reason]);
                 break;
-            case ProposalAction::Delist:
+            case Decision::Delist:
                 $this->lifecycle->markDelisted($server, (string) $params['public_reason']);
                 $this->em->persist(new TransparencyEntry($server->domain, 'delisted', (string) $params['rule'], (string) $params['public_reason'], $now));
-                $this->audit->curator($curator, 'server.delisted', $server, ['rule' => $params['rule'], 'reason' => $params['public_reason']]);
+                $this->audit->curator($curator, 'server.delisted', $server, ['rule' => $params['rule'], 'public_reason' => $params['public_reason'], 'reason' => $reason]);
                 $this->notifier->serverAdmin($server, 'Your server was delisted', "{$server->domain} was removed from the Aloha Directory.\n\nReason: {$params['public_reason']}\n\nYou can appeal to the advisory board within 30 days.");
                 break;
-            case ProposalAction::Reject:
+            case Decision::Reject:
                 $this->lifecycle->markRejected($server, (string) $params['public_reason']);
-                $this->audit->curator($curator, 'server.rejected', $server, ['reason' => $params['public_reason']]);
+                $this->audit->curator($curator, 'server.rejected', $server, ['public_reason' => $params['public_reason'], 'reason' => $reason]);
                 $this->notifier->serverAdmin($server, 'Your application was not accepted', "The curators did not accept {$server->domain} for the Aloha Directory.\n\nReason: {$params['public_reason']}");
                 break;
-            case ProposalAction::EnableSearch:
+            case Decision::EnableSearch:
                 $server->searchProvider = true;
-                $this->audit->curator($curator, 'server.search_enabled', $server);
+                $this->audit->curator($curator, 'server.search_enabled', $server, ['reason' => $reason]);
                 break;
-            case ProposalAction::DisableSearch:
+            case Decision::DisableSearch:
                 $server->searchProvider = false;
-                $this->audit->curator($curator, 'server.search_disabled', $server, ['reason' => $proposal->reason]);
+                $this->audit->curator($curator, 'server.search_disabled', $server, ['reason' => $reason]);
                 break;
         }
         $server->updatedAt = $now;
@@ -429,10 +372,10 @@ final class CurationService
      *
      * @return array<string, mixed>
      */
-    private function validateParams(ProposalAction $action, array $params): array
+    private function validateParams(Decision $decision, array $params): array
     {
-        switch ($action) {
-            case ProposalAction::Weight:
+        switch ($decision) {
+            case Decision::Weight:
                 $weight = $params['weight'] ?? null;
                 if (!is_numeric($weight)) {
                     throw new CurationException('The weight must be a number between 0.5 and 2.');
@@ -443,14 +386,14 @@ final class CurationService
                 }
 
                 return ['weight_percent' => $percent];
-            case ProposalAction::Delist:
+            case Decision::Delist:
                 $rule = (string) ($params['rule'] ?? '');
                 if (!\array_key_exists($rule, Covenant::delistingReasons())) {
                     throw new CurationException('Choose the rule that was broken.');
                 }
 
                 return ['rule' => $rule, 'public_reason' => $this->requireText((string) ($params['public_reason'] ?? ''), 'public reason', 1000)];
-            case ProposalAction::Reject:
+            case Decision::Reject:
                 return ['public_reason' => $this->requireText((string) ($params['public_reason'] ?? ''), 'reason for the admin', 1000)];
             default:
                 return [];
@@ -460,24 +403,24 @@ final class CurationService
     /**
      * @param array<string, mixed> $params
      */
-    private function assertApplicable(Server $server, ProposalAction $action, array $params): void
+    private function assertApplicable(Server $server, Decision $decision, array $params): void
     {
         $state = $server->state;
-        $ok = match ($action) {
-            ProposalAction::List => \in_array($state, [ServerState::InReview, ServerState::Waitlisted], true)
+        $ok = match ($decision) {
+            Decision::List => \in_array($state, [ServerState::InReview, ServerState::Waitlisted], true)
                 || (ServerState::Paused === $state && PauseKind::Curator === $server->pauseKind),
-            ProposalAction::Feature => ServerState::Listed === $state && !$server->featured,
-            ProposalAction::Unfeature => $server->featured,
-            ProposalAction::Delist => \in_array($state, [ServerState::Listed, ServerState::Paused], true),
-            ProposalAction::Weight => \in_array($state, [ServerState::Listed, ServerState::Paused], true) && $params['weight_percent'] !== $server->weightPercent,
-            ProposalAction::Reject => \in_array($state, [ServerState::Applied, ServerState::InReview, ServerState::Waitlisted], true),
-            ProposalAction::EnableSearch => ServerState::Listed === $state && !$server->searchProvider && [] !== ($server->profile['search']['capabilities'] ?? []),
-            ProposalAction::DisableSearch => $server->searchProvider,
+            Decision::Feature => ServerState::Listed === $state && !$server->featured,
+            Decision::Unfeature => $server->featured,
+            Decision::Delist => \in_array($state, [ServerState::Listed, ServerState::Paused], true),
+            Decision::Weight => \in_array($state, [ServerState::Listed, ServerState::Paused], true) && $params['weight_percent'] !== $server->weightPercent,
+            Decision::Reject => \in_array($state, [ServerState::Applied, ServerState::InReview, ServerState::Waitlisted], true),
+            Decision::EnableSearch => ServerState::Listed === $state && !$server->searchProvider && [] !== ($server->profile['search']['capabilities'] ?? []),
+            Decision::DisableSearch => $server->searchProvider,
         };
         if (!$ok) {
-            throw new CurationException(\sprintf('"%s" does not apply to %s in its current state (%s).', $action->label(), $server->domain, $server->state->label()));
+            throw new CurationException(\sprintf('"%s" does not apply to %s in its current state (%s).', $decision->label(), $server->domain, $server->state->label()));
         }
-        if (ProposalAction::List === $action && null === $server->profile) {
+        if (Decision::List === $decision && null === $server->profile) {
             throw new CurationException('The server has not sent a profile yet.');
         }
     }
@@ -486,7 +429,7 @@ final class CurationService
     {
         $review = $this->em->getRepository(Review::class)->findOneBy(['server' => $server, 'curator' => $curator, 'kind' => $kind], ['createdAt' => 'DESC']);
         if (null === $review || $review->createdAt < $this->clock->now()->modify('-'.self::REVIEW_VALID_DAYS.' days') || \in_array(false, $review->checklist, true)) {
-            throw new CurationException('Complete the review checklist (all items) before proposing to list this server.');
+            throw new CurationException('Complete the review checklist (all items) before listing this server.');
         }
         if ($review->profileFingerprint !== $server->profileFingerprint()) {
             throw new CurationException('The server changed its terms, jurisdiction, operator or moderation details after your review. Please review it again.');

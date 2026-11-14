@@ -138,8 +138,6 @@ details[open] summary { margin-bottom: .75rem; }
 .comment.from-server { border-color: var(--accent); }
 .comment.to-admin { border-color: var(--warn); }
 .meta { color: var(--muted); font-size: .85rem; margin: 0 0 .25rem; }
-.proposal { border-bottom: 1px solid var(--border); padding-bottom: .75rem; margin-bottom: .75rem; }
-.proposal:last-child { border-bottom: 0; }
 .pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .mono { font-family: var(--mono); overflow-wrap: anywhere; }
 .small { font-size: .82rem; }

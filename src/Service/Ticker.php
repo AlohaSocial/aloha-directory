@@ -35,13 +35,14 @@ final class Ticker
     }
 
     /**
-     * @return array{evaluated: int, media: int, builds: list<string>, site: bool, mirror: bool}
+     * @return array{evaluated: int, media: int, builds: list<string>, site: bool, mirror: bool, skipped: bool} skipped: another tick
+     *                                                                                               was running
      */
     public function tick(bool $force = false, bool $renderSite = false): array
     {
         $lock = $this->locks->createLock('aloha-directory-tick', 300);
         if (!$lock->acquire()) {
-            return ['evaluated' => 0, 'media' => 0, 'builds' => [], 'site' => false, 'mirror' => false];
+            return ['evaluated' => 0, 'media' => 0, 'builds' => [], 'site' => false, 'mirror' => true, 'skipped' => true];
         }
         try {
             $servers = $this->servers->findInStates(ServerState::Listed, ServerState::Paused);
@@ -71,6 +72,7 @@ final class Ticker
                 'builds' => array_map(static fn ($b): string => $b->list.'#'.$b->serial, $builds),
                 'site' => $site,
                 'mirror' => $mirror,
+                'skipped' => false,
             ];
         } finally {
             $lock->release();

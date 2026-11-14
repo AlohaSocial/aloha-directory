@@ -1,0 +1,116 @@
+# Runs on every push and pull request, and weekly so breakage from outside (runner images, services) shows up
+# even when nobody is committing. Every job must stay green; see AGENTS.md.
+name: CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The test configuration (tests/config.test.php); bin/console needs it outside PHPUnit too.
+  ALOHA_DIRECTORY_CONFIG: ${{ github.workspace }}/tests/config.test.php
+
+jobs:
+  static:
+    name: Static analysis and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: intl, sodium, pdo_sqlite
+          coverage: none
+          tools: composer:v2
+      - uses: ramsey/composer-install@v3
+      - run: composer validate --strict
+      - run: composer audit
+      - run: php vendor/bin/phpstan analyse --no-progress --memory-limit=1G
+      - run: php bin/console lint:container
+      - run: php bin/console lint:twig templates
+      - run: php bin/console lint:yaml config --parse-tags
+      - run: php bin/console doctrine:schema:validate --skip-sync
+
+  tests-sqlite:
+    name: Tests (PHP ${{ matrix.php }}, SQLite)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.4', '8.5']
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: intl, sodium, pdo_sqlite
+          coverage: none
+          tools: composer:v2
+      # The reference list verifier and the load-test signer are tested against the PHP code.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - uses: ramsey/composer-install@v3
+      # A skipped test is a test that did not run: fail instead of silently passing.
+      - run: php vendor/bin/phpunit --fail-on-skipped --fail-on-incomplete
+
+  tests-mariadb:
+    name: Tests and migrations (MariaDB)
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: directory_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      DB: mysql://root:root@127.0.0.1:3306
+      DB_OPTIONS: serverVersion=11.4.0-MariaDB&charset=utf8mb4
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: intl, sodium, pdo_mysql, pdo_sqlite
+          coverage: none
+          tools: composer:v2
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - uses: ramsey/composer-install@v3
+      # The migrations must produce exactly the schema the entities map (checked in the prod
+      # environment, which knows the Messenger table).
+      - name: Migrations match the entities
+        env:
+          APP_ENV: prod
+          APP_DEBUG: '0'
+        run: |
+          mysql -h 127.0.0.1 -uroot -proot -e 'CREATE DATABASE directory_migrations'
+          export DATABASE_URL="$DB/directory_migrations?$DB_OPTIONS"
+          php bin/console doctrine:migrations:migrate --no-interaction
+          php bin/console doctrine:migrations:up-to-date
+          php bin/console doctrine:schema:validate
+      # Not --fail-on-skipped: the database-outage test of /healthz only works with SQLite (the SQLite jobs run it).
+      - name: PHPUnit
+        run: DATABASE_URL="$DB/directory_test?$DB_OPTIONS" php vendor/bin/phpunit --fail-on-incomplete
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build --file docker/Dockerfile --tag aloha-directory:ci .

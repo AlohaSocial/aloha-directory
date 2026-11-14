@@ -12,8 +12,8 @@ use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\RateLimiter\Storage\CacheStorage;
 
 /**
- * Limits for the anonymous and expensive endpoints, per IP and per domain, with values from
- * config.php. Limiter keys are an HMAC with the app secret, so the stored state cannot be turned
+ * Limits for the anonymous and expensive endpoints (per IP address) and for messages from servers
+ * to the curators (per authenticated server), with values from config.php. Limiter keys are an HMAC with the app secret, so the stored state cannot be turned
  * back into IP addresses; it expires with the window (concept 8.4: no IP kept beyond abuse
  * prevention).
  */
@@ -74,9 +74,11 @@ final class RateLimits
                 'telemetry' => 60,
                 // Password checks in the console's account forms, per curator.
                 'account_confirm' => 20,
+                // Comments and complaint responses, per authenticated server (only it can use its quota).
+                'server_message' => $this->settings->int('messages_per_server_day'),
                 default => throw new \LogicException('Unknown limiter '.$name),
             },
-            'interval' => '1 hour',
+            'interval' => 'server_message' === $name ? '1 day' : '1 hour',
         ], new CacheStorage($this->cache));
     }
 }

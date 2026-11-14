@@ -177,18 +177,18 @@ abstract class FunctionalTestCase extends WebTestCase
     }
 
     /**
-     * Takes a server through review with two curators (alice proposes, bob confirms).
+     * Takes a server through review: alice (admin) reviews it and lists it. Bob is a second curator
+     * that many tests use.
      */
     protected function listServer(FakeAlohaServer $fake): Server
     {
         $server = $this->bringToReview($fake);
         self::assertSame(\App\Enum\ServerState::InReview, $server->state);
         $alice = $this->em->getRepository(Curator::class)->findOneBy(['email' => 'alice@nextcloud.test']) ?? $this->createCurator('alice@nextcloud.test', true);
-        $bob = $this->em->getRepository(Curator::class)->findOneBy(['email' => 'bob@nextcloud.test']) ?? $this->createCurator('bob@nextcloud.test');
+        $this->em->getRepository(Curator::class)->findOneBy(['email' => 'bob@nextcloud.test']) ?? $this->createCurator('bob@nextcloud.test');
         $curation = static::getContainer()->get(\App\Curation\CurationService::class);
         $curation->recordReview($alice, $server, \App\Entity\Review::KIND_INITIAL, array_fill_keys(array_keys(\App\Curation\Covenant::INITIAL_CHECKLIST), true), 'Looks good.');
-        $proposal = $curation->propose($alice, $server, \App\Enum\ProposalAction::List, [], 'Adds a German-speaking server.');
-        $curation->confirm($bob, $proposal);
+        $curation->decide($alice, $server, \App\Enum\Decision::List, [], 'Adds a German-speaking server.');
 
         return $this->server($fake->domain);
     }

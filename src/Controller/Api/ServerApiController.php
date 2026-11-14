@@ -233,6 +233,7 @@ final class ServerApiController extends AbstractController
             throw new ApiProblem(409, 'not_active', 'The server is not enrolled.');
         }
         $text = $this->text($body['data']);
+        $this->limitMessages($server);
         $comment = new Comment($server, null, true, CommentVisibility::Admin, $text, $this->clock->now());
         $this->em->persist($comment);
         $this->audit->server($server, 'server.commented');
@@ -253,12 +254,24 @@ final class ServerApiController extends AbstractController
         if (null === $complaint || $complaint->server !== $server || null === $complaint->sharedAt) {
             throw new ApiProblem(404, 'unknown_complaint', 'Unknown complaint.');
         }
-        $comment = new Comment($server, null, true, CommentVisibility::Admin, $this->text($body['data']), $this->clock->now(), $complaint);
+        $text = $this->text($body['data']);
+        $this->limitMessages($server);
+        $comment = new Comment($server, null, true, CommentVisibility::Admin, $text, $this->clock->now(), $complaint);
         $this->em->persist($comment);
         $this->audit->server($server, 'complaint.responded', ['complaint' => $complaint->id]);
         $this->em->flush();
 
         return new JsonResponse(['id' => $comment->id], 201);
+    }
+
+    /**
+     * Comments and complaint responses share one daily quota per server, so an enrolled server
+     * cannot flood the curators. Counted after authentication and validation: only the server
+     * itself can use up its quota, and rejected requests do not count.
+     */
+    private function limitMessages(Server $server): void
+    {
+        $this->limits->consume('server_message', 'server:'.$server->id);
     }
 
     /**

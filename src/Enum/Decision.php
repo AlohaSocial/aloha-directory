@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace App\Enum;
 
 /**
- * Decisions that need two curators: one proposes, a second confirms (concept 4.1, 13.4).
+ * Decisions a curator makes about a server (concept 4.1, 13.4). One curator decides, and the
+ * decision takes effect at once; it is recorded with its reason in the audit log.
  */
-enum ProposalAction: string
+enum Decision: string
 {
     case List = 'list';
     case Feature = 'feature';
