@@ -8,44 +8,11 @@
     <p><a href="https://{{ server.domain }}" rel="noopener noreferrer">{{ server.domain }}</a> · {{ m.state(server) }} · weight {{ server.weight }}</p>
     {% if server.pauseKind %}<p class="flash flash-warning">{{ server.pauseKind.label }}: {{ server.pauseReason }} (since {{ m.date(server.pausedAt) }})</p>{% endif %}
     {% if server.decisionReason and server.state.value in ['delisted', 'rejected'] %}<p class="flash flash-warning">Public reason: {{ server.decisionReason }}</p>{% endif %}
-    {% if conflict %}<p class="flash flash-error" role="alert">You declared a conflict of interest for this server ({{ conflict.note }}). You can read, but not review, propose or confirm.</p>{% endif %}
+    {% if conflict %}<p class="flash flash-error" role="alert">You declared a conflict of interest for this server ({{ conflict.note }}). You can read, but not review or decide.</p>{% endif %}
 </header>
 
 <div class="columns">
 <div class="main-col">
-
-{# --- Open proposals --------------------------------------------------------------------- #}
-{% set open = proposals|filter(x => x.status.value == 'open') %}
-{% if open is not empty %}
-<section class="card highlight">
-    <h2>Open proposals</h2>
-    {% for prop in open %}
-        <article class="proposal">
-            <p><strong>{{ prop.action.label }}</strong>{% if prop.params.weight_percent is defined %} to {{ prop.params.weight_percent / 100 }}{% endif %}
-               — proposed by {{ prop.proposedBy ? prop.proposedBy.displayName : 'a former curator' }} {{ m.date(prop.proposedAt) }}</p>
-            <p>{{ prop.reason }}</p>
-            {% if prop.params.rule is defined %}<p>Rule: {{ delisting_reasons[prop.params.rule] ?? prop.params.rule }}</p>{% endif %}
-            {% if prop.params.public_reason is defined %}<p>Public reason: {{ prop.params.public_reason }}</p>{% endif %}
-            {% if not conflict %}
-            <div class="inline-forms">
-                {% if not prop.proposedBy or prop.proposedBy.id != me.id %}
-                <form method="post" action="{{ path('console_proposal_confirm', {domain: server.domain, id: prop.id}) }}">
-                    {{ m.csrf() }}
-                    <label>Note (optional) <input type="text" name="note" maxlength="2000"></label>
-                    <button type="submit">Confirm as second curator</button>
-                </form>
-                {% endif %}
-                <form method="post" action="{{ path('console_proposal_decline', {domain: server.domain, id: prop.id}) }}">
-                    {{ m.csrf() }}
-                    <label>{{ prop.proposedBy and prop.proposedBy.id == me.id ? 'Withdraw' : 'Decline' }}: why? <input type="text" name="note" maxlength="2000" required></label>
-                    <button type="submit" class="secondary">{{ prop.proposedBy and prop.proposedBy.id == me.id ? 'Withdraw' : 'Decline' }}</button>
-                </form>
-            </div>
-            {% endif %}
-        </article>
-    {% endfor %}
-</section>
-{% endif %}
 
 {# --- Actions --------------------------------------------------------------------------- #}
 {% if not conflict %}
@@ -85,15 +52,15 @@
     {% endif %}
 
     <details>
-        <summary>Propose a decision (needs a second curator)</summary>
-        <form method="post" action="{{ path('console_server_propose', {domain: server.domain}) }}" class="stack">
+        <summary>Make a decision (takes effect at once)</summary>
+        <form method="post" action="{{ path('console_server_decide', {domain: server.domain}) }}" class="stack">
             {{ m.csrf() }}
             <label>Decision
-                <select name="action" required>
-                    {% for a in actions %}<option value="{{ a.value }}">{{ a.label }}</option>{% endfor %}
+                <select name="decision" required>
+                    {% for d in decisions %}<option value="{{ d.value }}">{{ d.label }}</option>{% endfor %}
                 </select>
             </label>
-            <label>Reason for the other curators <textarea name="reason" required maxlength="2000" rows="3"></textarea></label>
+            <label>Reason (kept in the audit log) <textarea name="reason" required maxlength="2000" rows="3"></textarea></label>
             <fieldset>
                 <legend>Only for some decisions</legend>
                 <label>New weight (0.5 – 2, steps of 0.05) <input type="number" name="weight" min="0.5" max="2" step="0.05" value="{{ server.weight }}"></label>
@@ -105,7 +72,7 @@
             {% if featured_unmet is not empty %}
                 <p class="hint">Not yet eligible for featuring: {{ featured_unmet|join(' ') }}</p>
             {% endif %}
-            <button type="submit">Propose</button>
+            <button type="submit">Decide</button>
         </form>
     </details>
 

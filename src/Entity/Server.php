@@ -286,8 +286,8 @@ class Server
 
     /**
      * SHA-256 of the canonical (RFC 8785) reviewed groups (terms, jurisdiction, operator,
-     * moderation) of the current profile. Reviews and listing proposals record it, so a listing can
-     * only be confirmed for exactly what the curators checked.
+     * moderation) of the current profile. Reviews record it, so a server can only be listed with
+     * exactly the profile the curator checked.
      */
     public function profileFingerprint(): string
     {

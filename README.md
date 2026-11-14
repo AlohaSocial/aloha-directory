@@ -1,5 +1,7 @@
 # Aloha Directory
 
+[![CI](https://github.com/AlohaSocial/aloha-directory/actions/workflows/ci.yml/badge.svg)](https://github.com/AlohaSocial/aloha-directory/actions/workflows/ci.yml)
+
 The directory service behind **directory.aloha.social**. It collects facts from Aloha servers and decisions from human curators, and publishes two signed lists:
 
 - **`servers.json`**: hand-picked Aloha servers that offer free accounts. The mobile and desktop apps use it to suggest where a newcomer signs up.
@@ -29,9 +31,9 @@ The website is static HTML, rendered from the signed list, so it shows exactly w
 | | |
 |---|---|
 | [![Sign-in with password and passkey](docs/screenshots/console-login.png)](docs/screenshots/console-login.png) | [![Queue](docs/screenshots/console-queue.png)](docs/screenshots/console-queue.png) |
-| **Sign-in.** Password and passkey on one form; a recovery code if the device is lost. | **Queue.** Everything waiting for a curator: proposals that need a second curator, applications, profile changes, complaints, automatic pauses and re-reviews. |
+| **Sign-in.** Password and passkey on one form; a recovery code if the device is lost. | **Queue.** Everything waiting for a curator: applications, profile changes, complaints, automatic pauses and re-reviews. |
 | [![Reviewing an application](docs/screenshots/console-review.png)](docs/screenshots/console-review.png) | [![List change guard](docs/screenshots/console-list-guard.png)](docs/screenshots/console-list-guard.png) |
-| **Review.** Profile, automatic checks, heartbeats, the review checklist, and a proposal from one curator waiting for a second. | **Change guard.** A build that would add many servers at once is held until a curator releases it. |
+| **Review.** Profile, automatic checks, heartbeats, the review checklist and the decision form. | **Change guard.** A build that would add many servers at once is held until a curator releases it. |
 | [![Fairness](docs/screenshots/console-fairness.png)](docs/screenshots/console-fairness.png) | [![Audit log](docs/screenshots/console-audit.png)](docs/screenshots/console-audit.png) |
 | **Fairness.** How newcomers spread across servers, by language and country, with the balance factors in the list. | **Audit log.** Every decision and automatic change, chained by hashes and verified daily. |
 | [![Accepting an invitation](docs/screenshots/console-invite.png)](docs/screenshots/console-invite.png) | [![Account with passkeys](docs/screenshots/console-account.png)](docs/screenshots/console-account.png) |
@@ -43,7 +45,7 @@ The website is static HTML, rendered from the signed list, so it shows exactly w
 |---|---|---|
 | Server API | Enrolment with domain proof, profile, hourly heartbeat, status, withdrawal and key rotation. Every request is signed (RFC 9421, Ed25519). | `src/Controller/Api`, `src/Service/ServerLifecycle.php`, [docs/server-integration.md](docs/server-integration.md) |
 | Automatic checks | HTTPS, nodeinfo, terms, abuse contact, signup state, block lists, heartbeat punctuality and Bluesky handles. They run hourly as background jobs, and domain verification uses the same queue. | `src/Check`, `src/MessageHandler` |
-| Curator console | Queue, server review with checklist, two-curator decisions, conflicts of interest, complaints, list builds and diffs, fairness, audit log and curator management. Sign-in with password and passkey. | `src/Controller/Console`, `src/Curation`, `src/Security`, `templates/console` |
+| Curator console | Queue, server review with checklist, decisions by one curator, conflicts of interest, complaints, list builds and diffs, fairness, audit log and curator management. Sign-in with password and passkey. | `src/Controller/Console`, `src/Curation`, `src/Security`, `templates/console` |
 | List builder | Rebuilds and signs the lists within a minute of a change and re-signs them daily. A change guard holds back mass additions and mass automatic pauses. Writes static files atomically and keeps every build. | `src/Lists` |
 | Fairness | Daily balance factors that spread newcomers across the featured servers of each language. | `src/Fairness` |
 | Audit chain | Hash chain over the audit log. A signed head is published daily, and the chain is verified daily. | `src/Audit` |
@@ -146,6 +148,8 @@ php vendor/bin/phpstan analyse           # level 8
 ```
 
 The functional tests simulate Aloha servers (`tests/Support/FakeAlohaServer.php`) and passkeys (`tests/Support/SoftAuthenticator.php`). They cover the complete path from enrolment to a signed list that verifies against the root key, and they cross-check the JavaScript list verifier and the load test's request signing. [AGENTS.md](AGENTS.md) lists the conventions.
+
+GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs PHPStan, the linters, the whole suite on SQLite and MariaDB, a check that the migrations match the entities, and the Docker build on every pull request, every push to `main`, and once a week.
 
 ## License
 

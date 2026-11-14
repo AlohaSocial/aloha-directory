@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Controller\Console;
 
 use App\Repository\ComplaintRepository;
-use App\Repository\ProposalRepository;
 use App\Repository\ServerRepository;
 use App\Service\DirectorySettings;
 use Psr\Clock\ClockInterface;
@@ -19,7 +18,6 @@ use Symfony\Component\Routing\Attribute\Route;
 final class QueueController extends AbstractConsoleController
 {
     public const TABS = [
-        'proposals' => 'Waiting for a second curator',
         'applications' => 'Applications',
         'profiles' => 'Profile changes',
         'complaints' => 'Complaints',
@@ -33,14 +31,12 @@ final class QueueController extends AbstractConsoleController
     public function __invoke(
         Request $request,
         ServerRepository $servers,
-        ProposalRepository $proposals,
         ComplaintRepository $complaints,
         DirectorySettings $settings,
         ClockInterface $clock,
     ): Response {
         $reviewBefore = $clock->now()->modify('+'.$settings->int('review_due_warning_days').' days');
         $items = [
-            'proposals' => $proposals->findOpen(),
             'applications' => $servers->findInReview(),
             'profiles' => $servers->findWithPendingProfile(),
             'complaints' => $complaints->findOpen(),
@@ -51,7 +47,7 @@ final class QueueController extends AbstractConsoleController
         ];
         $tab = (string) $request->query->get('tab', '');
         if (!isset(self::TABS[$tab])) {
-            $tab = 'proposals';
+            $tab = 'applications';
             foreach (array_keys(self::TABS) as $candidate) {
                 if ([] !== $items[$candidate]) {
                     $tab = $candidate;

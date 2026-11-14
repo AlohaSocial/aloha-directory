@@ -128,6 +128,9 @@ return [
         // 'enrol_per_ip_hour' => 10,
         // 'reports_per_ip_hour' => 5,
 
+        // Messages from one server to the curators (comments and complaint responses), per day
+        // 'messages_per_server_day' => 20,
+
         // Curator console
         // 'session_idle_minutes' => 30,
         // 'session_absolute_hours' => 8,

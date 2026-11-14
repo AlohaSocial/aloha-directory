@@ -65,7 +65,8 @@ export function verifyKeySet(json, rootKeys, lastSerial = null, now = Date.now()
   const listKeys = new Map();
   for (const key of payload.keys ?? []) {
     if (key.alg !== 'Ed25519' || key.status !== 'active') continue;
-    if (key.not_after && Date.parse(key.not_after) < now) continue;
+    // Trust a key only while its not_after, if present, is provably in the future (an unparsable date is not).
+    if (key.not_after && !(Date.parse(key.not_after) >= now)) continue;
     listKeys.set(key.kid, ed25519Key(key.public_key));
   }
   if (listKeys.size === 0) throw new VerificationError('key set has no active list key');

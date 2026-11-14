@@ -7,7 +7,7 @@ namespace App\Entity;
 use Doctrine\ORM\Mapping as ORM;
 
 /**
- * A declared conflict of interest: the curator never reviews, proposes or confirms for this server.
+ * A declared conflict of interest: the curator never reviews or decides anything about this server.
  */
 #[ORM\Entity]
 #[ORM\Table(name: 'curator_conflict')]

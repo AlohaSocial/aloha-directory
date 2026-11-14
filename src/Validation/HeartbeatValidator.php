@@ -25,12 +25,9 @@ final class HeartbeatValidator
         $sentAt = null;
         $sentAtRaw = $in->string('sent_at', 40);
         if (null !== $sentAtRaw) {
-            $sentAt = \DateTimeImmutable::createFromFormat(\DateTimeInterface::RFC3339, $sentAtRaw)
-                ?: \DateTimeImmutable::createFromFormat(\DateTimeInterface::RFC3339_EXTENDED, $sentAtRaw)
-                ?: \DateTimeImmutable::createFromFormat('Y-m-d\TH:i:s\Z', $sentAtRaw, new \DateTimeZone('UTC'));
-            if (false === $sentAt) {
+            $sentAt = self::parseTimestamp($sentAtRaw);
+            if (null === $sentAt) {
                 $in->error('sent_at', 'must be an RFC 3339 timestamp');
-                $sentAt = null;
             }
         }
 
@@ -90,5 +87,20 @@ final class HeartbeatValidator
         }
 
         return $heartbeat;
+    }
+
+    /**
+     * Parses an RFC 3339 timestamp. Impossible dates (February 31, hour 25) are rejected, not rolled over.
+     */
+    private static function parseTimestamp(string $value): ?\DateTimeImmutable
+    {
+        foreach ([\DateTimeInterface::RFC3339, \DateTimeInterface::RFC3339_EXTENDED, 'Y-m-d\TH:i:s\Z'] as $format) {
+            $parsed = \DateTimeImmutable::createFromFormat($format, $value, new \DateTimeZone('UTC'));
+            if (false !== $parsed && false === \DateTimeImmutable::getLastErrors()) {
+                return $parsed;
+            }
+        }
+
+        return null;
     }
 }

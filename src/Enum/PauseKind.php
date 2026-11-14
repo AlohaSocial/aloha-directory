@@ -17,7 +17,7 @@ enum PauseKind: string
     /** A curator paused the server during an investigation (concept 7.5). */
     case Curator = 'curator';
 
-    /** Automatic pauses lift themselves once the cause is gone; a curator pause needs two curators to lift. */
+    /** Automatic pauses lift themselves once the cause is gone; a curator pause lasts until a curator lists the server again. */
     public function isAutomatic(): bool
     {
         return self::Curator !== $this;

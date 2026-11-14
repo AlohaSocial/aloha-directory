@@ -15,7 +15,7 @@ This file maps the concept *Aloha Directory: server discovery and search* to the
 | 7.3–7.5 Review, featuring, re-review, complaints, pause | `Curation/CurationService`, `Curation/FeaturedEligibility`, `Curation/Covenant`, `Service/ComplaintIntake` |
 | 8 Lists, envelope, keys, distribution | `Lists/*`, `Crypto/*`, `docs/lists.md`, `tools/verify-list.mjs` |
 | 9.2 Choosing a server | On the device; documented in `docs/lists.md` |
-| 10 Search provider list | `Lists/SearchListEntryFactory`, provider status via the two-curator rule |
+| 10 Search provider list | `Lists/SearchListEntryFactory`, provider status set by a curator decision |
 | 11 Trust, security, privacy | Throughout; summary in `SECURITY.md` |
 | 12.4, 12.5 Delisting, transparency | `TransparencyEntry`, `Service/TransparencyReporter`, `templates/site/transparency.html.twig` |
 | 13.2 Static lists, rebuilt on change | `Lists/ListBuilder`, `Service/Ticker` |
@@ -39,7 +39,7 @@ This file maps the concept *Aloha Directory: server discovery and search* to the
 6. **Every signature is accepted only once (replay protection), and servers send a random `nonce`.** Ed25519 is deterministic, so without a nonce a legitimate retry within the same second would look like a replay.
 7. **`tag="aloha-directory"` is required**, and `@authority` comes from configuration. This keeps signatures meant for other services, such as search providers (10.4), from being replayed against the directory.
 8. **Key rotation with the old key (6.1) also needs a proof by the new key.** Otherwise a typo in the new key would lock the server out.
-9. **Single-curator actions** are pause, waiting list, light re-review of profile changes, revert of live changes, re-review records, notes and complaint handling. **Two-curator actions** are list (including lifting a curator pause), feature, unfeature, delist, weight, reject, and accepting or removing a search provider. A proposal to list needs a complete review checklist by the proposer from the last 60 days.
+9. **One curator decides everything (D21).** The concept asked for two curators on listing decisions; this was dropped on 2026-11-14. Decisions (list, including lifting a curator pause; feature, unfeature, delist, weight, reject, and accepting or removing a search provider) take effect at once and are recorded with their reason in the audit log. So are pauses, the waiting list, profile decisions, re-reviews, notes and complaint handling. Listing an application needs a complete review checklist by the deciding curator, of the current profile, from the last 60 days.
 10. **Abuse contact check (7.2).** The domain of the address must accept mail (MX or address record), and a test mail is sent once per address. Whether it bounced is not detected automatically: point the sender's bounce address at a mailbox the curators read.
 11. **Exact heartbeat numbers stay private.** They are shown in the console and used for monitoring. The public list carries buckets only, and the status API shows the admin the published buckets.
 12. **Logos and banners are re-encoded**, never passed through. They are decoded with bounded dimensions, re-encoded as WebP and named by their SHA-256.

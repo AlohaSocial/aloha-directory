@@ -11,21 +11,6 @@
 
 {% if items is empty %}
     <p class="empty">Nothing waiting here.</p>
-{% elseif tab == 'proposals' %}
-    <table>
-        <thead><tr><th>Server</th><th>Proposal</th><th>Reason</th><th>By</th><th>Since</th></tr></thead>
-        <tbody>
-        {% for p in items %}
-            <tr>
-                <td><a href="{{ path('console_server', {domain: p.server.domain}) }}">{{ p.server.domain }}</a></td>
-                <td>{{ p.action.label }}{% if p.params.weight_percent is defined %} → {{ p.params.weight_percent / 100 }}{% endif %}</td>
-                <td>{{ p.reason|length > 120 ? p.reason|slice(0, 120) ~ '…' : p.reason }}</td>
-                <td>{{ p.proposedBy ? p.proposedBy.displayName : '—' }}{% if p.proposedBy and p.proposedBy.id == me.id %} <span class="badge">you</span>{% endif %}</td>
-                <td>{{ m.date(p.proposedAt) }}</td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
 {% elseif tab == 'complaints' %}
     <table>
         <thead><tr><th>Server</th><th>Category</th><th>Status</th><th>Received</th></tr></thead>

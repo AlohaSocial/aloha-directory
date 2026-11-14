@@ -41,7 +41,8 @@ final class KeyFile
      */
     public static function generate(string $path): string
     {
-        if (file_exists($path)) {
+        // is_link(): file_exists() is false for a dangling symlink, and PHP would write through it.
+        if (file_exists($path) || is_link($path)) {
             throw new \RuntimeException(\sprintf('Refusing to overwrite existing key file "%s".', $path));
         }
         $seed = random_bytes(Ed25519::SEED_BYTES);

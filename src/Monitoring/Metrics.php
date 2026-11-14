@@ -239,9 +239,11 @@ final class Metrics
         $metric('newcomer_top_share', 'Share of new accounts taken by the largest featured server (7 days).', 'gauge');
         $out[] = 'aloha_directory_newcomer_top_share '.($m['fairness']['top_share'] ?? 0);
         $metric('queue_waiting_jobs', 'Background jobs waiting per queue.', 'gauge');
-        $metric('queue_oldest_job_seconds', 'Age of the oldest waiting job per queue.', 'gauge');
         foreach (['verify', 'checks', 'failed'] as $queue) {
             $out[] = \sprintf('aloha_directory_queue_waiting_jobs{queue="%s"} %d', $queue, $m['queues'][$queue]['waiting'] ?? 0);
+        }
+        $metric('queue_oldest_job_seconds', 'Age of the oldest waiting job per queue.', 'gauge');
+        foreach (['verify', 'checks', 'failed'] as $queue) {
             $out[] = \sprintf('aloha_directory_queue_oldest_job_seconds{queue="%s"} %d', $queue, $m['queues'][$queue]['oldest_seconds'] ?? 0);
         }
         $metric('audit_unsealed_entries', 'Audit entries older than 10 minutes that are not chained yet.', 'gauge');

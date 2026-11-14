@@ -52,7 +52,7 @@ Limits:
 - `verify`: 30 per IP address per hour, and 12 per pending key per hour.
 - All requests of one `verify` call (challenge, nodeinfo index, nodeinfo document, redirects included) share a budget of 12 seconds.
 
-A blocked domain gets `403 domain_blocked`. A delisted server gets `403 reapply_too_early` until six months after the decision. This also applies to a server that withdrew while a delisting was proposed.
+A blocked domain gets `403 domain_blocked`. A delisted server gets `403 reapply_too_early` until six months after the decision.
 
 ## 3. Signing requests (RFC 9421)
 
@@ -180,11 +180,14 @@ POST /api/v1/servers/{domain}/comments                          {"body": "…"} 
 POST /api/v1/servers/{domain}/complaints/{id}/responses         {"body": "…"}   (signed)
 ```
 
+The body is 1 to 5,000 characters. Comments and complaint responses share a limit of 20 messages per server per day
+(`messages_per_server_day`). Beyond it, the API answers `429 rate_limited` with `Retry-After`; show that to the admin
+instead of retrying automatically. Requests that fail the signature or validation do not count.
+
 ## 7. Withdraw and rotate the key
 
 ```http
 DELETE /api/v1/servers/{domain}             (signed) → state "withdrawn"; may enrol again at any time
-                                            (→ "delisted" if a delisting was proposed: see section 2)
 POST /api/v1/servers/{domain}/key           (signed with the CURRENT key)
      {"public_key": "<new>", "proof": "<base64url Ed25519 signature by the NEW key over
                                         'aloha-directory-key-rotation:<domain>:<new key id>'>"}

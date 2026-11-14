@@ -17,9 +17,9 @@ The worst outcome is a malicious server in the published list, sending newcomers
 **Getting into the list**
 - Domain control is proven with an HTTPS challenge, and nodeinfo must name Aloha.
 - Automatic checks run every hour.
-- Two different curators must agree, and a curator with a declared conflict of interest is excluded. An admin's own conflict can only be removed by another admin.
-- Reviews and listing proposals record a fingerprint of the reviewed profile (terms, jurisdiction, operator, moderation). A listing cannot be confirmed for a profile that changed after the review. Resuming a paused server never approves profile changes that are waiting for review.
-- Withdrawing while a delisting is proposed counts as a delisting: it is published and the six-month wait applies.
+- One curator decides, and the decision is written to the audit log with its reason. Listing an application needs that curator's own complete review. A curator with a declared conflict of interest is excluded from every decision about that server. An admin's own conflict can only be removed by another admin.
+- Reviews record a fingerprint of the reviewed profile (terms, jurisdiction, operator, moderation). A server cannot be listed with a profile that changed after the review. Resuming a paused server never approves profile changes that are waiting for review.
+- Decisions take effect at once, so a server cannot withdraw to escape a delisting.
 - Any single curator can pause a server immediately. A pause, or a server failing its checks, leaves the list within a minute.
 
 **Server API**
@@ -27,9 +27,10 @@ The worst outcome is a malicious server in the published list, sending newcomers
 - Each signature is accepted only once. The authority comes from configuration, never from the `Host` header.
 - Bodies are size-limited and validated against an allowlist, and unknown fields are dropped.
 - Anonymous endpoints are rate-limited per IP address, and `verify` also per pending key. Limits are never per domain, so nobody can use up another server's quota.
+- Messages to the curators (comments and complaint responses) are limited to 20 per server per day, counted only after the signature and the body are valid.
 - Enrolment cannot be disturbed by strangers: every enrol call creates its own pending record, and the contact address becomes authoritative only through the domain proof.
 - One `verify` call has a single 12-second budget for all its outbound requests.
-- Concurrent writes are safe: `Server` and `Proposal` carry an optimistic-lock version, and background jobs apply their results to a freshly read, row-locked server. A stale write fails instead of undoing a pause or a delisting.
+- Concurrent writes are safe: `Server` carries an optimistic-lock version, and background jobs apply their results to a freshly read, row-locked server. A stale write fails instead of undoing a pause or a delisting.
 
 **Outbound requests (SSRF)**
 - HTTPS only, on the default port.
@@ -73,13 +74,13 @@ An internal security review (2026-11-13) found no way to forge or replay a list 
 
 | Severity | Finding | Fix |
 |---|---|---|
-| High | A listing could be confirmed for a profile changed after the review | Profile fingerprint on reviews and proposals |
+| High | A listing could be confirmed for a profile changed after the review | Profile fingerprint on reviews (since 2026-11-14 one curator decides; the deciding curator's review must match the current profile) |
 | Medium | Lost updates could undo a pause or delisting | Optimistic lock versions; background jobs write under row locks |
 | Medium | Anonymous enrol could evict a pending key or set the admin e-mail | Separate pending enrolments; contact committed only by the domain proof |
 | Medium | `verify` could tie up PHP workers | Per-IP and per-key limits; one 12-second budget per call |
 | Low | Authenticator replaceable without the current one | Current code or recovery code required (now: an existing passkey) |
 | Low | Admin could remove their own conflict of interest | Another admin must remove it |
-| Low | Withdrawal escaped delisting | Treated as a delisting |
+| Low | Withdrawal escaped delisting | Treated as a delisting (moot since 2026-11-14: a delisting takes effect at once) |
 | Low | List self-check used the signing keys | Checked against the installed `keys.json` |
 | Low | Second-factor guessing limited per IP only | Per-account limiter |
 | Low | Image decoding memory | Pixel cap lowered to 16 MP |

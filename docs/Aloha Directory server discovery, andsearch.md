@@ -115,7 +115,7 @@ Six roles take part. Only curators and the directory operator act on directory.a
 
 ### 4.1 Curator team in practice
 
-The team starts with three to five people at Nextcloud. Every listing decision needs two curators to sign it off, and a curator who is involved with a server never reviews that server.
+The team starts with three to five people at Nextcloud. A single curator is enough for every decision, and the audit log records who decided and why. A curator who is involved with a server never reviews that server.
 
 Curators work in a web console on directory.aloha.social (sections 7 and 13.4). They sign in with a password and a TOTP code, and every action is logged. When governance moves to the foundation, the team grows with volunteers, and paid staff remain for the escalation queue.
 
@@ -205,14 +205,14 @@ The directory keeps the exact numbers, but the server list shows capacity in buc
 
 ## 7. Curation and moderation workflow
 
-A server gets onto the list only when two curators approve it, and it stays there only while it keeps passing the automatic checks and its review every six months. Machines decide whether a server is eligible; people decide whether it is listed.
+A server gets onto the list only when a curator has reviewed and approved it, and it stays there only while it keeps passing the automatic checks and its review every six months. Machines decide whether a server is eligible; people decide whether it is listed.
 
 ### 7.1 Listing states
 
 | State     | Meaning                                                                         | Visible in the apps              |
 |-----------|---------------------------------------------------------------------------------|----------------------------------|
 | Applied   | Enrolled and profile sent; waiting for automatic checks                         | No                               |
-| In review | Checks passed; waiting for two curators                                         | No                               |
+| In review | Checks passed; waiting for a curator                                            | No                               |
 | Listed    | Approved; heartbeat fresh; has free accounts                                    | Yes, signup offered              |
 | Full      | Listed, but no free accounts or signup closed                                   | Yes, marked full, no signup      |
 | Featured  | Listed, and also eligible to be recommended as the default choice               | Yes, can be the suggested server |
@@ -252,7 +252,7 @@ Only featured servers can be recommended as the default choice in the apps (sect
 
 - **Re-review every 6 months.** It uses a shortened checklist: a new test report, a test signup and a look at complaints.
 - **Complaints.** Anyone can report a listed server at directory.aloha.social/report. Reports go to the curator queue, and the server admin sees the complaint (without the reporter's identity) and can respond.
-- **Escalation.** For an urgent issue, such as illegal content left up, a data breach, or the operator disappearing, any single curator can *pause* a server at once. Delisting still needs two curators.
+- **Escalation.** For an urgent issue, such as illegal content left up, a data breach, or the operator disappearing, any single curator can *pause* a server at once. A curator can also delist it at once.
 - **Notice to users.** If a server is delisted or announces its shutdown, the apps show the server's existing users a banner pointing to the account move guide. The move itself uses the existing account move tooling.
 
 ## 8. Published lists: format, signing and distribution
@@ -417,7 +417,7 @@ The worst outcome is a malicious server in the list, sending thousands of newcom
 | Listed server is taken over or turns hostile later | Newcomers sent to a bad server  | Hourly heartbeats; TLS and nodeinfo monitoring; any single curator can pause at once; a pause leaves the list within a minute |
 | Server lies about capacity or moderation           | Bad experience                  | The live check before signup; test reports in reviews; complaints queue                                                       |
 | Spam bots use the registration API                 | Spam accounts on listed servers | Rate limits, challenge endpoint, approval mode, blocking disposable email domains (9.3)                                       |
-| Directory account of a curator compromised         | Bad listing decisions           | Password plus TOTP; two curators for every listing and delisting; audit log                                                   |
+| Directory account of a curator compromised         | Bad listing decisions           | Password plus passkey; change guard on mass additions; audit log with daily signed head; any curator can undo a decision      |
 | Search provider logs or sells queries              | Privacy breach                  | Server-side proxying without user identity; 7-day log limit in the policy; delisting                                          |
 | Directory becomes a single point of failure        | No onboarding                   | Bundled lists in the apps, mirrors, 30-day validity (13.7)                                                                    |
 
@@ -479,7 +479,7 @@ The apps and the server app need no change, because they trust the root key, not
 | Pause during an investigation (optional)                                       | One curator    | Immediately                    |
 | Notice to the admin with the specific concern                                  | Curators       | Within 24 h of the pause       |
 | Admin's response                                                               | Admin          | 14 days                        |
-| Decision: back to listed, or delisted                                          | Two curators   | Within 7 days of the response  |
+| Decision: back to listed, or delisted                                          | One curator    | Within 7 days of the response  |
 | Public entry in the transparency log (domain, date, rule broken, short reason) | Automatic      | When the decision is made      |
 | Appeal                                                                         | Advisory board | Within 30 days of the decision |
 
@@ -550,7 +550,7 @@ The console is simple but complete: server-rendered pages (Symfony with Twig and
 | Curators         | Admins invite and deactivate curators, set roles (curator, admin) and record conflicts of interest                                                                                       |
 | Account          | Password, TOTP device and recovery codes                                                                                                                                                 |
 
-The interface enforces the two-curator rule: one curator *proposes* listing, featuring, delisting or a weight change, with a reason, and a second curator *confirms* it. A curator with a declared conflict cannot confirm for that server. A pause needs only one curator and takes effect at once.
+One curator decides: listing, featuring, delisting, a weight change or a pause takes effect at once, with a reason that goes to the audit log. Listing an application needs that curator's own complete review of the current profile. A curator with a declared conflict cannot decide anything about that server.
 
 Curators sign in with a password and a TOTP code, and get recovery codes at setup. Sessions are short, failed sign-ins are rate-limited, and every action goes to the audit log. Server admins never sign in here: they see their status, the curators' questions and complaints in the Aloha admin settings, through the API.
 
@@ -694,6 +694,7 @@ Every atproto field in the list schemas is optional, so the directory launches i
 | D18 | How is capacity published?     | In buckets; the exact numbers stay in the directory                         |
 | D19 | How do curators sign in?       | Password plus TOTP                                                          |
 | D20 | Where is the public website?   | Part of the same application, written as static pages                       |
+| D21 | How many curators decide?      | One; every decision is recorded with its reason in the audit log (2026-11-14) |
 
 ### 16.3 Open questions
 
