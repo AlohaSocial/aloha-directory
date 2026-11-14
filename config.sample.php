@@ -64,7 +64,7 @@ return [
     // --- Directory rules ------------------------------------------------------------------------
 
     // Accepted nodeinfo software.name values of the Aloha app (concept 6.1, D2). [DIRECTORY_SOFTWARE_NAMES]
-    'software_names' => ['aloha'],
+    'software_names' => ['aloha-social'],
 
     // Servers below this version are paused after the grace period (concept 13.6). [DIRECTORY_MIN_SERVER_VERSION]
     'min_server_version' => '0.27.0',

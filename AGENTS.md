@@ -22,7 +22,7 @@ Symfony 8.1, PHP 8.4+, Doctrine ORM on MariaDB 10.11+. Read `README.md` and `doc
 - **Tests**: `runJobs()` handles queued jobs, `consoleLogin()` signs in with the curator's software passkey
   (`tests/Support/SoftAuthenticator.php`). `RouteGuardTest` walks every route: a new route must be sorted into one
   of its groups, and console forms must check the CSRF token. Every new feature or fix comes with a test.
-- **CI** (`.github/workflows/ci.yml`) runs on every push and pull request: PHPStan and lint, the suite on PHP 8.4
+- **CI** (`.github/workflows/ci.yml`) runs on every pull request and push to `main`: PHPStan and lint, the suite on PHP 8.4
   and 8.5 (SQLite), the suite and the migrations on MariaDB 11.4, and the Docker build. Incomplete tests fail CI, and
   so do skipped ones in the SQLite jobs (Node.js and git must be installed to run the whole suite locally).
 - **Templates**: no inline scripts or styles (strict CSP), never `|raw`.

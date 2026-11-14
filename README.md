@@ -149,7 +149,7 @@ php vendor/bin/phpstan analyse           # level 8
 
 The functional tests simulate Aloha servers (`tests/Support/FakeAlohaServer.php`) and passkeys (`tests/Support/SoftAuthenticator.php`). They cover the complete path from enrolment to a signed list that verifies against the root key, and they cross-check the JavaScript list verifier and the load test's request signing. [AGENTS.md](AGENTS.md) lists the conventions.
 
-GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs PHPStan, the linters, the whole suite on SQLite and MariaDB, a check that the migrations match the entities, and the Docker build on every push and pull request, and once a week.
+GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs PHPStan, the linters, the whole suite on SQLite and MariaDB, a check that the migrations match the entities, and the Docker build on every pull request, every push to `main`, and once a week.
 
 ## License
 
