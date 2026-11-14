@@ -1,9 +1,10 @@
-# Runs on every push and pull request, and weekly so breakage from outside (runner images, services) shows up
+# Runs on pull requests, on pushes to main, and weekly so breakage from outside (runner images, services) shows up
 # even when nobody is committing. Every job must stay green; see AGENTS.md.
 name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
   schedule:
     - cron: '17 4 * * 1'
